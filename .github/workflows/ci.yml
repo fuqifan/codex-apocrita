@@ -24,6 +24,8 @@ jobs:
       - name: Syntax
         run: |
           bash -n bin/* install.sh uninstall.sh lib/*.sh remote/* tests/*.sh
-          zsh -n completions/_apo
+          if command -v zsh >/dev/null 2>&1; then
+            zsh -n completions/_apo
+          fi
       - name: Tests
         run: ./tests/run.sh
