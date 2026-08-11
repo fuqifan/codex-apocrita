@@ -1,0 +1,6 @@
+.DS_Store
+work/
+outputs/
+*.tmp
+*.tar.gz
+test-results/

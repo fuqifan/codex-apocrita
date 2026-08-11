@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script=$(readlink "$0" 2>/dev/null || printf '%s' "$0")
+while [[ -L "$script" ]]; do
+  dir=$(cd -P "$(dirname "$script")" && pwd)
+  script=$(readlink "$script")
+  [[ "$script" == /* ]] || script="$dir/$script"
+done
+ROOT=$(cd -P "$(dirname "$script")/.." && pwd)
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/common.sh
+source "$ROOT/lib/common.sh"
+ca_load_config
+
+# The remote shell, not the local shell, must expand HOME.
+# shellcheck disable=SC2016
+REMOTE_ROOT='${HOME}/.local/share/codex-apocrita/current/remote'
+
+quote_cmd() { printf '%q' "$1"; }
+remote() {
+  local command="$1"
+  ssh -o BatchMode=yes "$CA_SSH_ALIAS" "bash -lc $(quote_cmd "$command")"
+}
+
+ssh_healthy() {
+  ssh -O check "$CA_SSH_ALIAS" >/dev/null 2>&1 &&
+    ssh -o BatchMode=yes "$CA_SSH_ALIAS" true >/dev/null 2>&1
+}
+
+ssh_socket() {
+  ssh -G "$CA_SSH_ALIAS" 2>/dev/null | awk '$1 == "controlpath" { print $2; exit }'
+}
+
+ssh_start() {
+  local socket
+  if ssh_healthy; then
+    printf 'SSH connection is already ready.\n'
+    return 0
+  fi
+  socket=$(ssh_socket)
+  ssh -O exit "$CA_SSH_ALIAS" >/dev/null 2>&1 || true
+  [[ -n "$socket" ]] && rm -f -- "$socket"
+  printf 'Opening authenticated SSH connection to %s...\n' "$CA_SSH_ALIAS"
+  ssh -MNf "$CA_SSH_ALIAS" || ca_die 'SSH authentication failed.'
+  for _ in {1..25}; do
+    if ssh_healthy; then printf 'SSH connection is ready.\n'; return 0; fi
+    sleep 0.2
+  done
+  ca_die "SSH master did not become usable. Try: $CA_COMMAND_NAME ssh force"
+}
+
+require_ssh() { ssh_healthy || ssh_start; }
+
+profile_name_ok() { ca_validate_name "$1"; }
+
+start_profile() {
+  local profile="${1:-cpu}"
+  profile_name_ok "$profile" || ca_die "Invalid profile name: $profile"
+  require_ssh
+  remote "$REMOTE_ROOT/codex-slurm-job start $(printf '%q' "$profile") && $REMOTE_ROOT/codex-slurm-job wait"
+}
+
+show_help() {
+  cat <<EOF
+Usage:
+  $CA_COMMAND_NAME                         Start or reuse the default CPU job
+  $CA_COMMAND_NAME start [PROFILE]         Start or reuse a profile
+  $CA_COMMAND_NAME switch PROFILE          Stop the current job and switch profiles
+  $CA_COMMAND_NAME status                  Show SSH and Slurm status
+  $CA_COMMAND_NAME stop                    Stop the Slurm job
+  $CA_COMMAND_NAME off                     Stop the job and SSH connection
+
+Profiles:
+  $CA_COMMAND_NAME config [list]
+  $CA_COMMAND_NAME config show NAME
+  $CA_COMMAND_NAME config create NAME [BASE]
+  $CA_COMMAND_NAME config set NAME KEY=VALUE...
+  $CA_COMMAND_NAME config delete NAME
+
+Maintenance:
+  $CA_COMMAND_NAME ssh [start|status|force|off]
+  $CA_COMMAND_NAME doctor [--runtime]
+  $CA_COMMAND_NAME logs [LINES]
+  $CA_COMMAND_NAME clean
+  $CA_COMMAND_NAME update
+  $CA_COMMAND_NAME rollback
+  $CA_COMMAND_NAME uninstall
+EOF
+}
+
+command="${1:-start}"
+case "$command" in
+  help|-h|--help) show_help ;;
+  start) start_profile "${2:-cpu}" ;;
+  cpu) start_profile cpu ;;
+  switch)
+    [[ -n "${2:-}" ]] || ca_die "Usage: $CA_COMMAND_NAME switch PROFILE"
+    profile_name_ok "$2" || ca_die "Invalid profile name: $2"
+    require_ssh
+    ca_confirm "Stop the current allocation and switch to '$2'?" || ca_die 'Switch cancelled.'
+    remote "$REMOTE_ROOT/codex-slurm-job stop"
+    start_profile "$2"
+    ;;
+  status)
+    if ssh_healthy; then
+      printf 'SSH:        connected\n'
+      remote "$REMOTE_ROOT/codex-slurm-job status"
+    else
+      printf 'SSH:        disconnected\nAllocation: unknown (run "%s" to connect)\n' "$CA_COMMAND_NAME"
+      exit 1
+    fi
+    ;;
+  stop)
+    require_ssh
+    remote "$REMOTE_ROOT/codex-slurm-job stop"
+    ;;
+  off)
+    require_ssh
+    remote "$REMOTE_ROOT/codex-slurm-job stop"
+    "$0" ssh off
+    ;;
+  ssh)
+    sub="${2:-start}"
+    case "$sub" in
+      start) ssh_start ;;
+      status) if ssh_healthy; then echo 'SSH: connected'; else echo 'SSH: disconnected'; exit 1; fi ;;
+      force|restart)
+        socket=$(ssh_socket); ssh -O exit "$CA_SSH_ALIAS" >/dev/null 2>&1 || true
+        [[ -n "$socket" ]] && rm -f -- "$socket"
+        ssh_start
+        ;;
+      off|stop)
+        socket=$(ssh_socket); ssh -O exit "$CA_SSH_ALIAS" >/dev/null 2>&1 || true
+        [[ -n "$socket" ]] && rm -f -- "$socket"
+        echo 'SSH connection is off.'
+        ;;
+      *) ca_die "Usage: $CA_COMMAND_NAME ssh [start|status|force|off]" ;;
+    esac
+    ;;
+  config)
+    require_ssh
+    sub="${2:-list}"
+    case "$sub" in
+      list) remote "$REMOTE_ROOT/codex-slurm-job profiles" ;;
+      show)
+        [[ -n "${3:-}" ]] || ca_die "Usage: $CA_COMMAND_NAME config show NAME"
+        profile_name_ok "$3" || ca_die 'Invalid profile name.'
+        remote "$REMOTE_ROOT/codex-slurm-job profile-show $(printf '%q' "$3")"
+        ;;
+      create)
+        [[ -n "${3:-}" ]] || ca_die "Usage: $CA_COMMAND_NAME config create NAME [BASE]"
+        if ! profile_name_ok "$3" || ! profile_name_ok "${4:-cpu}"; then ca_die 'Invalid profile name.'; fi
+        remote "$REMOTE_ROOT/codex-slurm-job profile-create $(printf '%q' "$3") $(printf '%q' "${4:-cpu}")"
+        ;;
+      set)
+        [[ -n "${3:-}" && -n "${4:-}" ]] || ca_die "Usage: $CA_COMMAND_NAME config set NAME KEY=VALUE..."
+        profile="$3"; shift 3; args=''
+        profile_name_ok "$profile" || ca_die 'Invalid profile name.'
+        for setting in "$@"; do
+          [[ "$setting" == *=* && "$setting" != *[\;\&\|\`\$\(\)\<\>]* ]] || ca_die "Invalid setting: $setting"
+          args="$args $(printf '%q' "$setting")"
+        done
+        remote "$REMOTE_ROOT/codex-slurm-job profile-set $(printf '%q' "$profile")$args"
+        ;;
+      delete|remove|rm)
+        [[ -n "${3:-}" ]] || ca_die "Usage: $CA_COMMAND_NAME config delete NAME"
+        profile_name_ok "$3" || ca_die 'Invalid profile name.'
+        remote "$REMOTE_ROOT/codex-slurm-job profile-delete $(printf '%q' "$3")"
+        ;;
+      *) ca_die "Usage: $CA_COMMAND_NAME config [list|show|create|set|delete]" ;;
+    esac
+    ;;
+  doctor)
+    printf 'codex-apocrita: %s\n' "$(cat "$ROOT/VERSION")"
+    printf 'SSH alias:       %s\n' "$CA_SSH_ALIAS"
+    printf 'SSH destination: %s@%s:%s\n' \
+      "$(ssh -G "$CA_SSH_ALIAS" 2>/dev/null | awk '$1=="user"{print $2;exit}')" \
+      "$(ssh -G "$CA_SSH_ALIAS" 2>/dev/null | awk '$1=="hostname"{print $2;exit}')" \
+      "$(ssh -G "$CA_SSH_ALIAS" 2>/dev/null | awk '$1=="port"{print $2;exit}')"
+    require_ssh
+    remote "$REMOTE_ROOT/install-remote.sh --doctor"
+    [[ "${2:-}" == --runtime ]] && remote "$REMOTE_ROOT/codex-slurm-job runtime-check"
+    ;;
+  logs)
+    require_ssh
+    lines="${2:-100}"; [[ "$lines" =~ ^[0-9]+$ ]] || ca_die 'LINES must be numeric.'
+    remote "tail -n $lines \"\${CODEX_HOME:-\$HOME/.codex}/app-server-control/app-server.log\" 2>/dev/null || echo 'No app-server log found.'"
+    ;;
+  clean) require_ssh; remote "$REMOTE_ROOT/codex-slurm-job clean"; echo 'Removed stale job state.' ;;
+  update)
+    [[ -n "${CA_SOURCE_DIR:-}" && -x "$CA_SOURCE_DIR/install.sh" ]] || ca_die 'Original source checkout is unavailable. Download the latest release and run install.sh again.'
+    if git -C "$CA_SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      ca_info 'Updating source checkout'
+      git -C "$CA_SOURCE_DIR" pull --ff-only
+    fi
+    exec "$CA_SOURCE_DIR/install.sh" --from-config "$(ca_config_dir)/config" --yes --skip-auth
+    ;;
+  rollback)
+    data=$(ca_data_dir)
+    [[ -L "$data/previous" ]] || ca_die 'No previous integration release is available.'
+    current=$(readlink "$data/current"); previous=$(readlink "$data/previous")
+    ln -sfn "$previous" "$data/current"
+    ln -sfn "$current" "$data/previous"
+    require_ssh
+    remote "$REMOTE_ROOT/install-remote.sh --rollback"
+    printf 'Rolled back integration to %s.\n' "$(basename "$previous")"
+    ;;
+  uninstall) exec "$ROOT/uninstall.sh" ;;
+  *) ca_die "Unknown command '$command'. Run: $CA_COMMAND_NAME --help" ;;
+esac

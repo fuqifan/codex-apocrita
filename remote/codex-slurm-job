@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/opt/slurm/bin:$PATH"
+
+config_root="${XDG_CONFIG_HOME:-$HOME/.config}/codex-apocrita"
+state_root="${XDG_STATE_HOME:-$HOME/.local/state}/codex-apocrita"
+profile_root="$config_root/profiles"
+job_file="$state_root/job-id"
+job_profile_file="$state_root/job-profile"
+tmp_root="$state_root/tmp"
+mkdir -p "$profile_root" "$tmp_root"; chmod 700 "$config_root" "$state_root" "$tmp_root"
+
+valid_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
+profile_path() { valid_name "$1" || return 1; printf '%s/%s.conf\n' "$profile_root" "$1"; }
+current_job() { [[ -r "$job_file" ]] || return 1; read -r id < "$job_file"; [[ "$id" =~ ^[0-9]+$ ]] || return 1; printf '%s\n' "$id"; }
+job_field() { squeue --jobs="$1" --noheader --format="$2" 2>/dev/null | head -n 1; }
+job_state() { local value; value=$(job_field "$1" '%T'); [[ -n "$value" ]] || return 1; printf '%s\n' "$value"; }
+job_is_ours() { [[ "$(job_field "$1" '%u')" == "$(id -un)" ]]; }
+remove_tmp() { [[ "$1" =~ ^[0-9]+$ ]] && rm -rf -- "$tmp_root/job-$1"; }
+forget_job() { [[ -n "${1:-}" ]] && remove_tmp "$1" || true; rm -f -- "$job_file" "$job_profile_file"; }
+
+cleanup_stale() {
+  local dir id recorded
+  for dir in "$tmp_root"/job-*; do
+    [[ -d "$dir" ]] || continue; id="${dir##*/job-}"
+    [[ "$id" =~ ^[0-9]+$ ]] || continue
+    job_state "$id" >/dev/null 2>&1 || remove_tmp "$id"
+  done
+  if recorded=$(current_job 2>/dev/null) && ! job_state "$recorded" >/dev/null 2>&1; then forget_job "$recorded"; fi
+  # Failed installers may leave a small staging tree. Never touch one created today.
+  find "$state_root" -maxdepth 1 -type d -name 'install-*' -mtime +0 -exec rm -rf -- {} + 2>/dev/null || true
+}
+
+validate_setting() {
+  case "$1" in
+    JOB_NAME|PARTITION|ACCOUNT|CONSTRAINT) [[ "$2" =~ ^[A-Za-z0-9._-]+$ ]] ;;
+    NODES|NTASKS|CPUS_PER_TASK|CPUS_PER_GPU) [[ "$2" =~ ^[1-9][0-9]*$ ]] ;;
+    MEM|MEM_PER_CPU) [[ "$2" =~ ^[1-9][0-9]*([KMGT])?$ ]] ;;
+    TIME) [[ "$2" =~ ^[0-9]+(-[0-9]+)?(:[0-9]{1,2}){1,2}$ ]] ;;
+    GRES) [[ "$2" =~ ^[A-Za-z0-9._:-]+$ ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+show_status() {
+  local id state profile='' node elapsed limit
+  if ! id=$(current_job 2>/dev/null) || ! state=$(job_state "$id" 2>/dev/null); then echo 'Allocation: none'; return; fi
+  if ! job_is_ours "$id"; then echo "Allocation: invalid owner for recorded job $id" >&2; return 1; fi
+  [[ -r "$job_profile_file" ]] && read -r profile < "$job_profile_file"
+  IFS='|' read -r node elapsed limit < <(squeue --jobs="$id" --noheader --format='%N|%M|%l')
+  printf 'Allocation: %s\nJob:        %s\n' "$state" "$id"
+  [[ -n "$profile" ]] && printf 'Profile:    %s\n' "$profile"
+  printf 'Node:       %s\nElapsed:    %s\nLimit:      %s\n' "$node" "$elapsed" "$limit"
+}
+
+start_profile() {
+  local name="$1" file existing state active='' job_id key value
+  local -a args
+  file=$(profile_path "$name") || { echo "Invalid profile name: $name" >&2; return 2; }
+  [[ -r "$file" ]] || { echo "Profile not found: $name" >&2; return 1; }
+  if existing=$(current_job 2>/dev/null) && state=$(job_state "$existing" 2>/dev/null); then
+    job_is_ours "$existing" || { echo 'Recorded allocation belongs to another user.' >&2; return 1; }
+    [[ -r "$job_profile_file" ]] && read -r active < "$job_profile_file"
+    if [[ "$active" == "$name" ]]; then printf 'Reusing allocation %s (%s).\n' "$existing" "$state"; return; fi
+    printf 'Allocation %s already uses profile %s. Run "apo switch %s".\n' "$existing" "${active:-unknown}" "$name" >&2; return 1
+  fi
+  args=(--parsable --output=/dev/null --error=/dev/null)
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    validate_setting "$key" "$value" || { echo "Invalid setting: $key=$value" >&2; return 2; }
+    case "$key" in
+      JOB_NAME) args+=(--job-name="$value");; PARTITION) args+=(--partition="$value");;
+      ACCOUNT) args+=(--account="$value");; CONSTRAINT) args+=(--constraint="$value");;
+      GRES) args+=(--gres="$value");; NODES) args+=(--nodes="$value");; NTASKS) args+=(--ntasks="$value");;
+      CPUS_PER_TASK) args+=(--cpus-per-task="$value");; CPUS_PER_GPU) args+=(--cpus-per-gpu="$value");;
+      MEM) args+=(--mem="$value");; MEM_PER_CPU) args+=(--mem-per-cpu="$value");; TIME) args+=(--time="$value");;
+    esac
+  done < "$file"
+  job_id=$(sbatch "${args[@]}" --wrap='sleep infinity'); job_id="${job_id%%;*}"
+  [[ "$job_id" =~ ^[0-9]+$ ]] || { echo "Unexpected sbatch response: $job_id" >&2; return 1; }
+  printf '%s\n' "$job_id" > "$job_file"; printf '%s\n' "$name" > "$job_profile_file"; chmod 600 "$job_file" "$job_profile_file"
+  printf 'Submitted profile %s as allocation %s.\n' "$name" "$job_id"
+}
+
+wait_for_job() {
+  local id state
+  id=$(current_job) || { echo 'No active allocation.' >&2; return 1; }
+  while :; do
+    state=$(job_state "$id" 2>/dev/null || true)
+    case "$state" in
+      RUNNING) printf '\nReady: job %s on %s.\n' "$id" "$(job_field "$id" '%N')"; return ;;
+      PENDING|CONFIGURING) printf '\rWaiting for job %s (%s)...' "$id" "$state"; sleep 2 ;;
+      *) printf '\nAllocation %s ended (%s).\n' "$id" "${state:-missing}" >&2; forget_job "$id"; return 1 ;;
+    esac
+  done
+}
+
+stop_job() {
+  local id
+  if ! id=$(current_job 2>/dev/null) || ! job_state "$id" >/dev/null 2>&1; then [[ -n "${id:-}" ]] && forget_job "$id"; echo 'No active allocation.'; return; fi
+  job_is_ours "$id" || { echo 'Refusing to cancel a job owned by another user.' >&2; return 1; }
+  scancel "$id"
+  for _ in {1..20}; do job_state "$id" >/dev/null 2>&1 || break; sleep 0.25; done
+  forget_job "$id"; printf 'Stopped allocation %s.\n' "$id"
+}
+
+list_profiles() {
+  local file name partition cpus mem time
+  printf '%-16s %-10s %-8s %-10s %s\n' PROFILE PARTITION CPUS MEMORY TIME
+  for file in "$profile_root"/*.conf; do
+    [[ -e "$file" ]] || continue; name=$(basename "$file" .conf)
+    partition=$(awk -F= '$1=="PARTITION"{print $2}' "$file")
+    cpus=$(awk -F= '$1=="CPUS_PER_TASK"||$1=="CPUS_PER_GPU"{print $2}' "$file")
+    mem=$(awk -F= '$1=="MEM"{print $2} $1=="MEM_PER_CPU"{print $2 "/CPU"}' "$file")
+    time=$(awk -F= '$1=="TIME"{print $2}' "$file")
+    printf '%-16s %-10s %-8s %-10s %s\n' "$name" "${partition:--}" "${cpus:--}" "${mem:--}" "${time:--}"
+  done
+}
+
+set_profile() {
+  local name="$1" file assignment key value tmp
+  shift; file=$(profile_path "$name") || return 2; [[ -r "$file" ]] || { echo "Profile not found: $name" >&2; return 1; }
+  for assignment in "$@"; do
+    [[ "$assignment" == *=* ]] || { echo "Expected KEY=VALUE: $assignment" >&2; return 2; }
+    key="${assignment%%=*}"; value="${assignment#*=}"; validate_setting "$key" "$value" || { echo "Invalid setting: $assignment" >&2; return 2; }
+    tmp=$(mktemp "$state_root/profile.XXXXXX")
+    awk -F= -v key="$key" -v value="$value" 'BEGIN{r=0} $1==key{print key "=" value;r=1;next}{print}END{if(!r)print key "=" value}' "$file" > "$tmp"
+    mv "$tmp" "$file"
+  done
+  printf 'Updated profile %s.\n' "$name"
+}
+
+runtime_check() {
+  local id shared_tmp; id=$(current_job) || { echo 'No active allocation.' >&2; return 1; }
+  [[ "$(job_state "$id")" == RUNNING ]] || { echo 'Allocation is not running.' >&2; return 1; }
+  shared_tmp="$tmp_root/job-$id"
+  mkdir -p "$shared_tmp"; chmod 700 "$shared_tmp"
+  # Variables in the diagnostic are expanded within the allocated Slurm step.
+  # shellcheck disable=SC2016
+  srun --jobid="$id" --overlap --unbuffered --ntasks=1 \
+    env TMPDIR="$shared_tmp" TMP="$shared_tmp" TEMP="$shared_tmp" bash -c \
+    'hostname; printf "SLURM_JOB_ID=%s\n" "$SLURM_JOB_ID"; cat /proc/self/cgroup; grep "^Cpus_allowed_list" /proc/self/status; printf "TMPDIR=%s\n" "$TMPDIR"'
+}
+
+cleanup_stale
+case "${1:-status}" in
+  start) [[ $# == 2 ]] || { echo 'Usage: codex-slurm-job start PROFILE' >&2; exit 2; }; start_profile "$2" ;;
+  wait) wait_for_job ;; status) show_status ;; stop) stop_job ;; clean) cleanup_stale ;; runtime-check) runtime_check ;;
+  profiles) list_profiles ;; profile-names) for file in "$profile_root"/*.conf; do [[ -e "$file" ]] && basename "$file" .conf; done ;;
+  profile-show)
+    if file=$(profile_path "${2:-}") && [[ -r "$file" ]]; then cat "$file"; else echo 'Profile not found.' >&2; exit 1; fi ;;
+  profile-create)
+    [[ $# -ge 2 && $# -le 3 ]] || { echo 'Usage: profile-create NAME [BASE]' >&2; exit 2; }
+    file=$(profile_path "$2"); base=$(profile_path "${3:-cpu}"); [[ -r "$base" ]] || { echo 'Base profile not found.' >&2; exit 1; }
+    [[ ! -e "$file" ]] || { echo 'Profile already exists.' >&2; exit 1; }; cp "$base" "$file"; echo "Created profile $2." ;;
+  profile-set) [[ $# -ge 3 ]] || { echo 'Usage: profile-set NAME KEY=VALUE...' >&2; exit 2; }; name="$2"; shift 2; set_profile "$name" "$@" ;;
+  profile-delete)
+    [[ $# == 2 ]] || { echo 'Usage: profile-delete NAME' >&2; exit 2; }; [[ "$2" != cpu ]] || { echo 'The built-in cpu profile cannot be deleted.' >&2; exit 1; }
+    file=$(profile_path "$2"); [[ -e "$file" ]] || { echo 'Profile not found.' >&2; exit 1; }; rm -f -- "$file"; echo "Deleted profile $2." ;;
+  *) echo 'Unknown codex-slurm-job command.' >&2; exit 2 ;;
+esac

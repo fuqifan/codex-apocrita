@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_shell="${CODEX_APOCRITA_REAL_SHELL:-/bin/bash}"
+args=()
+for arg in "$@"; do [[ "$arg" == -i ]] || args+=("$arg"); done
+exec "$real_shell" "${args[@]}"

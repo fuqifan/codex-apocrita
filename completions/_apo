@@ -1,0 +1,28 @@
+#compdef __APO_COMMAND__
+
+___APO_COMMAND___profiles() {
+  local -a profiles
+  profiles=("${(@f)$(__APO_COMMAND__ config list 2>/dev/null | awk 'NR>1 {print $1}')}" )
+  (( ${#profiles} )) && _describe 'resource profile' profiles
+}
+
+___APO_COMMAND__() {
+  _arguments -C \
+    '1:command:(start cpu switch status stop off config ssh doctor logs clean update rollback uninstall help)' \
+    '*::argument:->args'
+  case "$words[2]" in
+    start|switch) ___APO_COMMAND___profiles ;;
+    config)
+      if (( CURRENT == 3 )); then
+        _values 'config command' list show create set delete
+      elif [[ "$words[3]" == show || "$words[3]" == set || "$words[3]" == delete ]]; then
+        ___APO_COMMAND___profiles
+      elif [[ "$words[3]" == create && CURRENT == 5 ]]; then
+        ___APO_COMMAND___profiles
+      fi
+      ;;
+    ssh) _values 'SSH command' start status force off ;;
+  esac
+}
+
+compdef ___APO_COMMAND__ __APO_COMMAND__

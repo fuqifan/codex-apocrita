@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+upstream="$HOME/.local/bin/codex-direct"
+runtime="$HOME/.local/share/codex-apocrita/current/remote/codex-slurm"
+upstream_bin="$HOME/.local/share/codex-apocrita/upstream-bin"
+export CODEX_INSTALL_DIR="$upstream_bin"
+export PATH="$upstream_bin:$PATH"
+
+[[ -x "$upstream" ]] || { echo "Codex upstream executable is missing: $upstream" >&2; exit 1; }
+for arg in "$@"; do
+  if [[ "$arg" == app-server ]]; then exec "$runtime" "$@"; fi
+done
+exec "$upstream" "$@"

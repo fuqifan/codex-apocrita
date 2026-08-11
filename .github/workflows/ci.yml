@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck on macOS
+        if: runner.os == 'macOS'
+        run: brew install shellcheck
+      - name: ShellCheck
+        run: shellcheck -x -P SCRIPTDIR bin/* install.sh uninstall.sh lib/*.sh remote/* tests/*.sh
+      - name: Syntax
+        run: |
+          bash -n bin/* install.sh uninstall.sh lib/*.sh remote/* tests/*.sh
+          zsh -n completions/_apo
+      - name: Tests
+        run: ./tests/run.sh
