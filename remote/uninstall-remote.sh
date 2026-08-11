@@ -10,7 +10,7 @@ config_root="${XDG_CONFIG_HOME:-$HOME/.config}/codex-apocrita"
 job_tool="$remote_root/current/remote/codex-slurm-job"
 
 [[ "$(id -u)" -ne 0 ]] || { echo 'Refusing to run as root.' >&2; exit 1; }
-[[ -x "$job_tool" ]] && "$job_tool" stop || true
+if [[ -x "$job_tool" ]]; then "$job_tool" stop || true; fi
 
 for link in "$HOME/.local/bin/codex" "$HOME/.local/bin/codex-direct" "$HOME/.local/bin/codex-apocrita-login-shell"; do
   if [[ -L "$link" ]]; then

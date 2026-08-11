@@ -17,7 +17,10 @@ job_field() { squeue --jobs="$1" --noheader --format="$2" 2>/dev/null | head -n 
 job_state() { local value; value=$(job_field "$1" '%T'); [[ -n "$value" ]] || return 1; printf '%s\n' "$value"; }
 job_is_ours() { [[ "$(job_field "$1" '%u')" == "$(id -un)" ]]; }
 remove_tmp() { [[ "$1" =~ ^[0-9]+$ ]] && rm -rf -- "$tmp_root/job-$1"; }
-forget_job() { [[ -n "${1:-}" ]] && remove_tmp "$1" || true; rm -f -- "$job_file" "$job_profile_file"; }
+forget_job() {
+  if [[ -n "${1:-}" ]]; then remove_tmp "$1"; fi
+  rm -f -- "$job_file" "$job_profile_file"
+}
 
 cleanup_stale() {
   local dir id recorded

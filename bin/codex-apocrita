@@ -11,7 +11,7 @@ ROOT=$(cd -P "$(dirname "$script")/.." && pwd)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/common.sh
 source "$ROOT/lib/common.sh"
-ca_load_config
+ca_load_config "$(ca_config_dir)/config"
 
 # The remote shell, not the local shell, must expand HOME.
 # shellcheck disable=SC2016

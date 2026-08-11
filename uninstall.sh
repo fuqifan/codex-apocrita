@@ -14,7 +14,7 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-ca_load_config
+ca_load_config "$(ca_config_dir)/config"
 ca_confirm 'Remove codex-apocrita local and remote components?' || ca_die 'Uninstall cancelled.'
 
 if ssh -O check "$CA_SSH_ALIAS" >/dev/null 2>&1 || ssh "$CA_SSH_ALIAS" true >/dev/null 2>&1; then
