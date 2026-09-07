@@ -8,6 +8,37 @@ export CODEX_INSTALL_DIR="$upstream_bin"
 export PATH="$upstream_bin:$PATH"
 
 [[ -x "$upstream" ]] || { echo "Codex upstream executable is missing: $upstream" >&2; exit 1; }
+# Even --version initializes Codex's temporary helpers. Keep that initialization
+# away from a listener using the same CODEX_HOME on another cluster node.
+if [[ $# == 1 && "$1" == --version ]]; then
+  umask 077
+  version_state_base="${XDG_STATE_HOME:-$HOME/.local/state}"
+  [[ "$version_state_base" == /* && "$version_state_base" != *$'\n'* && "$version_state_base" != *$'\r'* ]] || {
+    echo 'Version-query state directory must be an absolute path.' >&2; exit 64;
+  }
+  version_state_root="$version_state_base/codex-apocrita"
+  version_home="$version_state_root/version-probe-home"
+  canonical_home=$(readlink -m -- "$version_home")
+  canonical_tmp=$(readlink -m -- "${TMPDIR:-/tmp}")
+  [[ "$canonical_home" != "$canonical_tmp" && "$canonical_home" != "${canonical_tmp%/}/"* ]] || {
+    echo 'Version-query home must be outside the system temporary directory.' >&2; exit 64;
+  }
+  for directory in "$version_state_base" "$version_state_root" "$version_home"; do
+    [[ ! -L "$directory" ]] || { echo 'Version-query directory must not be a symlink.' >&2; exit 64; }
+    if [[ ! -e "$directory" ]]; then mkdir -p -- "$directory"; fi
+    [[ -d "$directory" && -O "$directory" ]] || { echo 'Version-query directory must be user-owned.' >&2; exit 64; }
+  done
+  chmod 700 -- "$version_home"
+  # Only this private home's own helper directory may survive an earlier query.
+  # Never populate it from the listener's config, authentication or sessions.
+  shopt -s nullglob dotglob
+  for entry in "$version_home"/*; do
+    [[ "${entry##*/}" == tmp && -d "$entry" && ! -L "$entry" && -O "$entry" ]] || {
+      echo 'Unexpected content in the isolated version-query home.' >&2; exit 64;
+    }
+  done
+  CODEX_HOME="$version_home" exec "$upstream" "$@"
+fi
 for arg in "$@"; do
   if [[ "$arg" == app-server ]]; then exec "$runtime" "$@"; fi
 done

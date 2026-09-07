@@ -28,6 +28,7 @@ printf '%s\n' "\$*" >> '$TEST_TMP/srun'
 while [[ \$# -gt 0 && \$1 != env ]]; do shift; done
 shift
 export SLURM_JOB_ID=4242
+export SLURM_STEP_ID=1
 if [[ "\$*" == *'/proc/self/cgroup'* ]]; then
   tmp=''
   for arg in "\$@"; do case "\$arg" in TMPDIR=*) tmp=\${arg#*=};; esac; done

@@ -2,9 +2,16 @@
 set -euo pipefail
 
 state_root="${XDG_STATE_HOME:-$HOME/.local/state}/codex-apocrita"
+[[ "$state_root" == /* && "$state_root" != *$'\n'* && "$state_root" != *$'\r'* &&
+   -d "$state_root" && ! -L "$state_root" && -O "$state_root" ]] || {
+  echo 'Codex state must be an owned absolute directory.' >&2; exit 64;
+}
 job_file="$state_root/job-id"
 upstream="$HOME/.local/bin/codex-direct"
+runtime_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+step_entry="$runtime_dir/codex-step-entry"
 [[ -x "$upstream" ]] || { echo "Codex is not installed: $upstream" >&2; exit 1; }
+[[ -f "$step_entry" && -r "$step_entry" && ! -L "$step_entry" ]] || { echo 'Codex Slurm step entry is missing or symlinked.' >&2; exit 1; }
 [[ -r "$job_file" ]] || { echo 'No Codex Slurm allocation. Run apo first.' >&2; exit 1; }
 read -r job_id < "$job_file"
 [[ "$job_id" =~ ^[0-9]+$ ]] || { echo 'Invalid recorded Slurm job ID.' >&2; exit 1; }
@@ -13,7 +20,15 @@ state=$(squeue --jobs="$job_id" --noheader --format='%T' 2>/dev/null | head -n 1
 owner=$(squeue --jobs="$job_id" --noheader --format='%u' 2>/dev/null | head -n 1)
 [[ "$owner" == "$(id -un)" ]] || { echo "Slurm allocation $job_id is not owned by this user." >&2; exit 1; }
 shared_tmp="$state_root/tmp/job-$job_id"
-mkdir -p "$shared_tmp"; chmod 700 "$shared_tmp"
+umask 077
+for directory in "$state_root/tmp" "$shared_tmp"; do
+  [[ ! -L "$directory" ]] || { echo 'Codex temporary directory must not be a symlink.' >&2; exit 64; }
+  if [[ ! -e "$directory" ]]; then mkdir -m 700 -- "$directory"; fi
+  [[ -d "$directory" && -O "$directory" ]] || { echo 'Codex temporary directory must be user-owned.' >&2; exit 64; }
+done
+chmod 700 -- "$shared_tmp"
+# Keep --unbuffered: the byte proxy cannot wait for newline-delimited stdout.
+# This is not Slurm --pty or an SSH terminal allocation.
 exec srun --jobid="$job_id" --overlap --unbuffered --ntasks=1 \
   env TMPDIR="$shared_tmp" TMP="$shared_tmp" TEMP="$shared_tmp" \
-  "$upstream" "$@"
+  "$BASH" "$step_entry" "$job_id" "$state_root" "$@"
