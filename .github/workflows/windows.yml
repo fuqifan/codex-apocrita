@@ -21,6 +21,9 @@ jobs:
       - name: Test pure lease decisions on PowerShell 7
         shell: pwsh
         run: ./tests/Test-DesktopProfileGuard.ps1
+      - name: Test Desktop activation identity decisions without starting Desktop
+        shell: pwsh
+        run: ./tests/Test-DesktopActivationGuard.ps1
       - name: Test pure lease decisions on Windows PowerShell 5.1
         shell: powershell
         run: ./tests/Test-DesktopProfileGuard.ps1

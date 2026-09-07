@@ -157,6 +157,18 @@ A short-lived lease identifies the launched process and lets only its matching
 PowerShell child receive the adapter PATH. Ordinary shells do not qualify. If
 the desktop is already running, quit it normally; the launcher will not kill it.
 
+The successful launch result is `DESKTOP_STARTED_PROFILE_APPLIED`; an open window
+alone does not confirm that the adapter environment was applied. If a Store
+update changes the registered package during startup, the launcher refuses the
+different identity. Quit Desktop normally and rerun the same launcher after the
+update completes. Reinstallation and new SSH authentication are not required
+solely because of this package mismatch.
+
+Launch outcomes are saved locally as `state/desktop-launch-<launch-id>.json`, with
+expected and observed package/process metadata. These files do not contain
+credentials or environment contents, but their paths can identify the Windows
+account; keep raw records private and sanitize any shared diagnostics.
+
 Select the configured alias in the desktop SSH settings, then the intended remote
 project directory. Separate tasks may use separate roots within one controller.
 They share resources and a Unix account; this is not operating-system isolation.
@@ -188,6 +200,7 @@ controller or reverse-SSH back to login.
 | Alias not visible | Check the concrete Windows SSH entry and selected connection. |
 | Adapter refuses a request | Check validated settings and supported options; do not enable arbitrary proxies or forwarding. |
 | Store executable missing after update | Let the update finish and rerun the launch check. |
+| Desktop opens but the launcher reports a different package | Quit normally and rerun the launcher after the Store update completes; confirm `DESKTOP_STARTED_PROFILE_APPLIED` before testing SSH. |
 | Direct WindowsApps executable launch denied | Use the package-activation launcher; do not alter WindowsApps permissions. |
 | Build output quarantined | Review security-product events and source/build provenance; use only a narrowly scoped, organization-approved exception if needed. |
 | Connection works but a task fails | Investigate remote task configuration and permissions separately. |

@@ -8,6 +8,7 @@ changes are needed.
 ```powershell
 pwsh -NoProfile -File .\tests\Run-CoreTests.ps1
 pwsh -NoProfile -File .\tests\Test-DesktopProfileGuard.ps1
+pwsh -NoProfile -File .\tests\Test-DesktopActivationGuard.ps1
 powershell.exe -NoProfile -File .\tests\Test-DesktopProfileGuard.ps1
 pwsh -NoProfile -File .\tests\Test-DesktopProfileLifecycle.ps1
 ```
