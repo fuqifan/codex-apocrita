@@ -43,15 +43,12 @@ production ownership checks. The external compiler's single known fixture output
 has its owner set explicitly inside that temporary tree, then passes the original
 ownership and trusted-writer checks.
 
-## Backend mocks
-
-The shell suite uses temporary home directories and mock executables. Proxy
-isolation tests cover independent transient homes, the original listener socket,
-retained proxy state, and invalid paths. See [backend isolation](backend-proxy-isolation.md)
-for the manual cleanup requirement after processes and their allocation have ended.
-
-When using WSL with a Windows checkout, preserve LF endings and executable bits.
-Use an isolated local Linux copy if needed; never target the live remote install.
+Installation regressions also verify that read-only preflight creates no state,
+an invalid second profile does not change the first profile or adapter ACLs,
+an untrusted parent for a missing profile is rejected without creating directories,
+and a rejected top-level installation preserves existing configuration, profiles,
+and installation records. Temporary wrapper scripts select only the fixture's
+profiles; no actual Windows profile is read or edited by these tests.
 
 ## Manual integration
 
@@ -59,6 +56,19 @@ Local tests do not establish Store activation, actual desktop SSH discovery, or
 scheduler ownership and placement. Collect the separate observations in the
 [Windows guide](windows-wsl.md#verify-without-compute-probes). Do not run compute
 probes where policy prohibits them.
+
+Use the [clean-install and rollback procedure](windows-wsl.md#clean-install-restart-and-rollback-acceptance)
+for live acceptance of a particular rebased revision. Record the exact adapter
+commit and upstream backend commit separately. Do not include backend proxy-home
+or version-isolation patches in the Windows acceptance baseline. If the backend
+requires an independent fix, report that distinction rather than attributing it
+to the adapter.
+
+For each item, distinguish `PASS`, `FAIL`, and `NOT RUN`, and attach the observed
+result. Record build/install, package activation, actual Desktop SSH, normal root
+and subagent file work, concurrent tasks, reconnect after a normal Desktop restart,
+and verified rollback separately. A procedure or a passing local fixture is not
+evidence that any live item passed.
 
 Before sharing failures, remove accounts, project paths, task contents, credentials,
 and protocol payloads. Share a failing synthetic test name, sanitized error, and

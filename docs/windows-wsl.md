@@ -107,7 +107,15 @@ pwsh -NoProfile -File .\Build.ps1
 pwsh -NoProfile -File .\Install-Adapter.ps1 -ConfigPath .\adapter-config.json -CheckOnly
 ```
 
-The check-only operation does not install a hook. Before installing, finish or
+The check-only operation validates the configuration and performs a read-only
+preflight of required adapter files, installation destinations, and both profiles.
+It does not install a hook, replace a configuration, create state, or change ACLs.
+The actual installer repeats preflight before its first configuration write;
+individual writers recheck paths before use. Concurrent external edits or later
+I/O errors can still interrupt installation, so retain the installation record
+and inspect a failure before retrying.
+
+Before installing, finish or
 pause work that depends on the desktop connection and quit the desktop normally.
 The installer refuses an active desktop process.
 
@@ -195,6 +203,63 @@ Removal checks the exact installed suffix and disables its lease. Source, privat
 configuration, and backups remain. It does not cancel Slurm jobs or remove WSL
 authentication. If the suffix has changed, inspect the difference rather than
 overwriting the profile.
+
+## Clean-install, restart, and rollback acceptance
+
+Use this procedure to test a rebased adapter revision. It is an acceptance plan;
+only observed results from the named revision establish a live pass.
+
+1. Record the adapter commit, the unmodified upstream backend commit, Windows,
+   PowerShell, WSL, OpenSSH, and registered Desktop versions. Keep the backend
+   baseline free of additional proxy-home or version-isolation patches so their
+   necessity can be assessed independently.
+2. Create a fresh private ASCII directory as your ordinary Windows user. Copy
+   the tracked adapter source into it, create configuration from the example,
+   and build there. Do not copy an old binary, `state`, lease, or hook installation
+   record. Do not build/install as another account or elevate merely to bypass an
+   ownership failure. Verify both the directory and compiler output have the
+   expected owner and trusted writers.
+3. If another adapter installation is active, preserve its directory and locally
+   record both PowerShell profiles' bytes, ownership, and ACLs, plus hashes of
+   relevant configuration files. Keep this backup private. Normally quit Desktop
+   and use that installation's own rollback script before installing the fresh
+   hook. Two public installations use the same managed suffix and cannot share it;
+   even differently named older hooks should be removed to avoid ambiguous test
+   results. Verify their removal against the baseline. Preserve SSH aliases,
+   authentication, existing controller allocations, and unrelated background
+   services.
+4. Run local fixtures and the fresh installer's check-only operation, then install
+   and launch with the commands above. Verify the fresh lease and scoped profile
+   handshake refer to the newly launched official Desktop process. Confirm an
+   actual Desktop SSH request reaches the intended login endpoint without a new
+   password prompt. Correlate it with login-side scheduler metadata for the owned,
+   running controller. A launcher acknowledgement alone does not prove SSH.
+5. In a disposable remote documentation workspace, exercise ordinary root-agent
+   file reading/editing and delegated subagent file work. Record task identity,
+   subagent parentage, and produced files without publishing their private paths
+   or contents. Run two independent documentation tasks concurrently and record
+   overlapping activity. These are normal agent file operations, not scientific
+   computation or acceptance probes inside a compute shell. Follow any stricter
+   local policy; scientific tests still require their approved submission path.
+6. Finish or pause the disposable work, normally quit Desktop, and relaunch through
+   the fresh launcher. Verify a new process/lease and a real SSH reconnect, then
+   reopen the same remote tasks and confirm their history and file access. Record
+   any effects on pre-existing work separately; do not assume closing the UI
+   proves unattended Goal survival.
+7. Normally quit again and run fresh rollback verification and removal. Confirm
+   both profiles match the pre-install bytes and ACLs, the lease is disabled, and
+   ordinary-shell PATH, Windows SSH configuration, and system SSH match baseline.
+   Source, private configuration, and backups intentionally remain. Do not cancel
+   an existing allocation or close its WSL master merely to test adapter removal.
+8. If replacing a previous installation only for this test, reinstall that
+   installation's own hook and launch through its original launcher. Confirm its
+   connection and any independent background services still work. Keep the fresh
+   test directory until the sanitized report and restoration evidence are saved.
+
+Keep accounts, private project paths, task contents, profile bodies, credentials,
+and protocol payloads out of the public report. Share software versions, commit
+IDs, synthetic test summaries, sanitized errors, observed lifecycle outcomes, and
+the exact scope of any untested item.
 
 ## Evidence and limits
 
