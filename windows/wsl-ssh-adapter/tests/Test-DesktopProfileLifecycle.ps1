@@ -1,6 +1,10 @@
 #requires -Version 7.0
 # Temporary profiles only. No actual Windows profile installation or app launch.
 $ErrorActionPreference='Stop'
+Add-Type -Path (Join-Path $PSScriptRoot 'FixtureOwnerContext.cs')
+# Scope the default owner change to this disposable fixture, not the process or
+# the account. All production ownership, writer and reparse checks remain active.
+[ApocritaAdapter.Tests.FixtureOwnerContext]::Run([Func[object]] {
 $source=Split-Path $PSScriptRoot -Parent
 $temporary=Join-Path $PSScriptRoot ('codex-adapter-profile-test-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($temporary)
@@ -88,6 +92,19 @@ internal static class ValidationLockFixture {
     $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     & $compiler /nologo /target:exe /platform:x64 /warnaserror+ ('/out:'+(Join-Path $temporary 'bin\ssh.exe')) $validatorSource
     if ($LASTEXITCODE -ne 0) { throw 'Local validation lock fixture compilation failed.' }
+    # A child compiler uses the process token, not this thread's impersonation
+    # token. Normalize only this exact newly built fixture artifact, then verify
+    # it with the unmodified production guards. Do not repair arbitrary failures.
+    $fixtureBinary=[IO.Path]::GetFullPath((Join-Path $temporary 'bin\ssh.exe'))
+    $fixtureRoot=[IO.Path]::GetFullPath($temporary).TrimEnd('\')+'\'
+    if (-not $fixtureBinary.StartsWith($fixtureRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Fixture compiler output escaped its temporary directory.' }
+    Assert-DesktopLocalPath $fixtureBinary -MustExist
+    $binaryInfo=[IO.FileInfo]::new($fixtureBinary)
+    $binaryAcl=[IO.FileSystemAclExtensions]::GetAccessControl($binaryInfo,[Security.AccessControl.AccessControlSections]::Owner)
+    $binaryAcl.SetOwner([Security.Principal.SecurityIdentifier]::new((Get-DesktopUserSid)))
+    [IO.FileSystemAclExtensions]::SetAccessControl($binaryInfo,$binaryAcl)
+    Assert-DesktopLocalPath $fixtureBinary -MustExist -Owned
+    if (-not (Test-DesktopTrustedWriters $fixtureBinary)) { throw 'Fixture compiler output permits untrusted writers.' }
     $lockConfig=Join-Path $temporary 'lock-fixture.json'
     [IO.File]::WriteAllText($lockConfig,'{"fixture":true}')
     $validationResult=& (Join-Path $temporary 'Initialize-AdapterConfiguration.ps1') -ConfigPath $lockConfig -CheckOnly
@@ -99,3 +116,4 @@ internal static class ValidationLockFixture {
     $tempRoot=[IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')+'\'
     if ($resolved.StartsWith($tempRoot,[StringComparison]::OrdinalIgnoreCase) -and [IO.Path]::GetFileName($resolved) -like 'codex-adapter-profile-test-*') { Remove-Item -LiteralPath $resolved -Recurse -Force }
 }
+})

@@ -35,6 +35,14 @@ configuration must not receive the adapter PATH. Pure activation tests inspect
 arguments or use mocks; they must not activate the real Store app. Run guard tests
 under Windows PowerShell 5.1 and PowerShell 7 where applicable.
 
+The lifecycle fixture uses a copied same-user token with the user SID as the
+default file owner, so it also runs on hosted administrator accounts whose default
+owner is Administrators. This context is limited to the disposable fixture and
+restored on exit; it does not change process privileges, account settings, or the
+production ownership checks. The external compiler's single known fixture output
+has its owner set explicitly inside that temporary tree, then passes the original
+ownership and trusted-writer checks.
+
 ## Backend mocks
 
 The shell suite uses temporary home directories and mock executables. Proxy
