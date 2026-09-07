@@ -16,6 +16,7 @@ assert_count() {
 new_home() {
   TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/codex-apocrita-test.XXXXXX")
   export TEST_TMP HOME="$TEST_TMP/home" XDG_CONFIG_HOME="$TEST_TMP/config" XDG_STATE_HOME="$TEST_TMP/state" XDG_DATA_HOME="$TEST_TMP/data"
+  export CODEX_APOCRITA_LOCAL_RUNTIME_ROOT="$TEST_TMP/node-local-runtime"
   mkdir -p "$HOME" "$TEST_TMP/bin"
   export PATH="$TEST_TMP/bin:/usr/local/bin:/usr/bin:/bin"
 }

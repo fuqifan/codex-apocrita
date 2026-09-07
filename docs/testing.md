@@ -6,7 +6,7 @@ Please use a small CPU allocation for this test. Submit substantial CPU or GPU w
 
 ## 1. Install
 
-Clone the private repository on macOS or Linux:
+Clone the public repository on macOS or Linux:
 
 ```bash
 git clone https://github.com/Ellysian/codex-apocrita.git
@@ -45,28 +45,40 @@ apo
 Wait for `Ready`, then open Codex Desktop:
 
 1. Open **Settings → Connections**.
-2. Enable `apocrita-codex`, or the alias you selected.
-3. Open a small test repository on Apocrita.
+2. Enable the newly created `apocrita-codex` connection, or the new Codex SSH alias you selected during installation. Do **not** enable your usual Apocrita login-node or VS Code-node alias for this test.
+3. Start a new chat, click on **Choose project**, and choose **New remote project**.
+4. Select the new `apocrita-codex` connection.
+5. Select any workspace on Apocrita and click **Add project**.
 
 ## 3. Verify the allocation
 
-Send Codex this prompt:
+In your local terminal, generate the strict test prompt from the profile you installed:
 
-```text
-Run hostname, print SLURM_JOB_ID, show /proc/self/cgroup,
-show Cpus_allowed_list from /proc/self/status, and print TMPDIR.
-Then spawn two subagents and ask each to run the same checks.
-Present all three results in a table.
+```bash
+apo test-prompt
 ```
 
-The root agent and both subagents should report:
+For a different named profile, run `apo test-prompt PROFILE`. The command reads that remote profile when it runs, so its `expected.cpu_count`, `expected.memory`, and `expected.time_limit` values are generated from your current settings rather than copied from this guide.
 
-- the same compute-node hostname and Slurm job ID;
-- a cgroup containing that job ID;
-- a limited CPU set;
-- the same private `~/.local/state/codex-apocrita/tmp/job-JOB_ID` directory.
+Copy the entire generated prompt into the new Codex task. It requires the root agent and exactly one subagent to execute the checks independently and return one single-line JSON object with no Markdown. A successful result has this shape (values are illustrative):
 
-Also ask the subagents to run `pwd`, `git status --short`, and `/usr/bin/true`. These commands should complete without a `No such file or directory` process-launch error.
+```json
+{"expected":{"cpu_count":4,"memory":"12G","time_limit":"10:00:00"},"root":{"hostname":"node123","slurm_job_id":"12345678","cgroup":"0::/system.slice/slurmstepd.scope/job_12345678/step_1/user/task_0\n","cpus_allowed_list":"2,10,19,21","cpu_count":4,"tmpdir":"/home/example/.local/state/codex-apocrita/tmp/job-12345678"},"subagent":{"hostname":"node123","slurm_job_id":"12345678","cgroup":"0::/system.slice/slurmstepd.scope/job_12345678/step_1/user/task_0\n","cpus_allowed_list":"2,10,19,21","cpu_count":4,"tmpdir":"/home/example/.local/state/codex-apocrita/tmp/job-12345678"},"checks":{"root_default_exec_succeeded":true,"subagent_default_exec_succeeded":true,"fallback_used":false,"same_hostname":true,"same_slurm_job_id":true,"job_id_present_in_root_cgroup":true,"job_id_present_in_subagent_cgroup":true,"same_tmpdir":true,"root_cpu_count_matches_profile":true,"subagent_cpu_count_matches_profile":true,"all_checks_pass":true}}
+```
+
+Confirm that:
+
+- `checks.all_checks_pass` is `true`;
+- both default-execution checks are `true` and `fallback_used` is `false`;
+- both cgroups contain the reported Slurm job ID;
+- both CPU counts match `expected.cpu_count`;
+- root and subagent use the same compute node, job ID, and private `~/.local/state/codex-apocrita/tmp/job-JOB_ID` directory.
+
+Because the subagent must execute terminal commands to collect its result, this also checks the shared temporary-directory fix for the former `No such file or directory` process-launch error.
+
+If `apo logs` reports only an orchestration validation error such as `timeout_ms must be at least 10000`, regenerate the prompt after updating the integration. That error concerns how the agent waited for its subagent; it is not evidence of a Slurm, filesystem, or sandbox failure. The generated prompt requires the root probe to finish first so a later subagent orchestration error cannot erase a successful root result.
+
+The generated prompt specifies absolute paths to standard POSIX utilities for both probes. This prevents an agent from choosing an optional interpreter such as Node.js that may not be installed on Apocrita. An exit status `127` with `node: command not found` is a diagnostic-command error, not a sandbox or subagent infrastructure failure.
 
 ## 4. Try the basic lifecycle
 

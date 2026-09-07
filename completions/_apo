@@ -2,26 +2,31 @@
 
 ___APO_COMMAND___profiles() {
   local -a profiles
-  profiles=("${(@f)$(__APO_COMMAND__ config list 2>/dev/null | awk 'NR>1 {print $1}')}" )
+  profiles=("${(@f)$(__APO_COMMAND__ __complete profiles 2>/dev/null)}" )
   (( ${#profiles} )) && _describe 'resource profile' profiles
 }
 
 ___APO_COMMAND__() {
   _arguments -C \
-    '1:command:(start cpu switch status stop off config ssh doctor logs clean update rollback uninstall help)' \
+    '1:command:(start cpu switch force restart status stop off config ssh doctor test-prompt logs clean update rollback uninstall help -h --help)' \
     '*::argument:->args'
   case "$words[2]" in
-    start|switch) ___APO_COMMAND___profiles ;;
+    start|switch|restart) ___APO_COMMAND___profiles ;;
     config)
       if (( CURRENT == 3 )); then
         _values 'config command' list show create set delete
-      elif [[ "$words[3]" == show || "$words[3]" == set || "$words[3]" == delete ]]; then
+      elif [[ ( "$words[3]" == show || "$words[3]" == set || "$words[3]" == delete ) && CURRENT == 4 ]]; then
         ___APO_COMMAND___profiles
+      elif [[ "$words[3]" == set && CURRENT -ge 5 ]]; then
+        _values 'profile setting' \
+          JOB_NAME= PARTITION= ACCOUNT= CONSTRAINT= GRES= NODES= NTASKS= \
+          CPUS_PER_TASK= CPUS_PER_GPU= MEM= MEM_PER_CPU= TIME=
       elif [[ "$words[3]" == create && CURRENT == 5 ]]; then
         ___APO_COMMAND___profiles
       fi
       ;;
     ssh) _values 'SSH command' start status force off ;;
+    test-prompt) ___APO_COMMAND___profiles ;;
   esac
 }
 

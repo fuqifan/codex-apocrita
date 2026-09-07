@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+ca_runtime_die() {
+  printf 'codex-apocrita runtime: %s\n' "$*" >&2
+  return 1
+}
+
+ca_owner_uid() {
+  stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1" 2>/dev/null
+}
+
+ca_local_runtime_root() {
+  printf '%s\n' "${CODEX_APOCRITA_LOCAL_RUNTIME_ROOT:-/tmp/codex-apocrita-$(id -u)}"
+}
+
+ca_prepare_codex_tmp() {
+  local uid local_root local_tmp codex_tmp owner
+  uid=$(id -u)
+  local_root=$(ca_local_runtime_root)
+  local_tmp="$local_root/codex-tmp"
+  codex_tmp="$HOME/.codex/tmp"
+
+  [[ "$local_root" == /* && "$local_root" != / && "$local_root" != /tmp ]] ||
+    ca_runtime_die "Unsafe node-local runtime path: $local_root" || return 1
+  if [[ -L "$local_root" || -e "$local_root" && ! -d "$local_root" ]]; then
+    ca_runtime_die "Node-local runtime path is not a real directory: $local_root" || return 1
+  fi
+
+  umask 077
+  mkdir -p "$local_root" "$local_tmp" "$HOME/.codex"
+  owner=$(ca_owner_uid "$local_root")
+  [[ "$owner" == "$uid" ]] ||
+    ca_runtime_die "Node-local runtime path is owned by uid $owner, expected $uid: $local_root" || return 1
+  owner=$(ca_owner_uid "$local_tmp")
+  [[ "$owner" == "$uid" ]] ||
+    ca_runtime_die "Node-local Codex tmp is owned by uid $owner, expected $uid: $local_tmp" || return 1
+  chmod 700 "$local_root" "$local_tmp"
+
+  if [[ -L "$codex_tmp" && "$(readlink "$codex_tmp")" == "$local_tmp" ]]; then
+    return 0
+  fi
+  if [[ -e "$codex_tmp" && ! -d "$codex_tmp" && ! -L "$codex_tmp" ]]; then
+    ca_runtime_die "Refusing to replace non-directory Codex tmp path: $codex_tmp" || return 1
+  fi
+
+  # Codex documents this tree as temporary helper/cache state. Persistent
+  # authentication, settings, databases, and tasks remain elsewhere in
+  # ~/.codex. Replace only this exact path with the managed node-local link.
+  rm -rf -- "$codex_tmp"
+  ln -s "$local_tmp" "$codex_tmp"
+  [[ -L "$codex_tmp" && "$(readlink "$codex_tmp")" == "$local_tmp" ]] ||
+    ca_runtime_die "Failed to create managed Codex tmp link: $codex_tmp" || return 1
+}
+
+ca_remove_codex_tmp_link() {
+  local codex_tmp="$HOME/.codex/tmp" local_tmp
+  local_tmp="$(ca_local_runtime_root)/codex-tmp"
+  if [[ -L "$codex_tmp" && "$(readlink "$codex_tmp")" == "$local_tmp" ]]; then
+    rm -f -- "$codex_tmp"
+    mkdir -p "$codex_tmp"
+    chmod 700 "$codex_tmp"
+  fi
+}

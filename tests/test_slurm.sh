@@ -68,3 +68,4 @@ bash "$TEST_ROOT/remote/codex-slurm" app-server --agent root
 bash "$TEST_ROOT/remote/codex-slurm" app-server --agent subagent
 assert_count 2 'job=4242' "$TEST_TMP/agents"
 assert_count 2 "tmp=$XDG_STATE_HOME/codex-apocrita/tmp/job-4242" "$TEST_TMP/agents"
+assert_count 2 'args=app-server' "$TEST_TMP/agents"

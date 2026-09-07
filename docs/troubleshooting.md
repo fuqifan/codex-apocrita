@@ -35,7 +35,19 @@ Run `apo doctor --runtime` and confirm `TMPDIR` points beneath:
 ~/.local/state/codex-apocrita/tmp/job-JOB_ID
 ```
 
-If it reports `/tmp`, update or reinstall the integration. Step-local `/tmp` prevents fresh subagents from seeing Codex process helpers.
+Also verify that Codex's disposable temporary tree is managed locally:
+
+```bash
+ssh apocrita 'readlink ~/.codex/tmp'
+```
+
+It should report `/tmp/codex-apocrita-UID/codex-tmp`, with your numeric uid in place of `UID`. If `apo logs` reports a missing `~/.codex/tmp/arg0/.../codex-linux-sandbox`, update or reinstall the integration. Do not use an unsandboxed fallback to declare the diagnostic successful.
+
+## Bubblewrap reports a missing unrelated `/data/...` path
+
+If normal commands fail with `bwrap: Can't bind mount ... No such file or directory`, stop acceptance testing and report the node name and exact error. Apocrita's mount metadata can expose inactive unrelated automounts to Bubblewrap even when the selected project is your home directory. Do not activate or inspect the named dataset to make the test pass, and do not use elevated or unsandboxed execution. This requires an upstream Codex/Bubblewrap fix or an Apocrita mount-configuration change.
+
+If stderr says that direct runtime enforcement is incompatible with `--use-legacy-landlock`, update or reinstall the integration. That experimental workaround is unsafe for current Codex Desktop permission profiles and has been removed.
 
 ## Job remains pending
 

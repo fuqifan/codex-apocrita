@@ -64,6 +64,10 @@ No mode invokes `sudo` or writes outside the remote home directory.
 
 The remote account must use Bash for v0.1. Zsh is supported for the local management command and completions, but the installed remote shell wrapper delegates Codex's noninteractive SSH processes to `/bin/bash`.
 
+## Shell completion
+
+The installer generates completion definitions using the local command name you chose. Open a new terminal, type `apo `, and press Tab to complete commands. Completion also discovers remote profile names and suggests supported `KEY=` settings after `apo config set PROFILE `. Run `apo --help` or `apo -h` when you want the complete command list instead.
+
 ## Authentication
 
 Unless `--skip-auth` is supplied, the installer checks `codex login status` remotely and starts `codex login --device-auth` when needed. Open the displayed URL locally and enter the one-time code.

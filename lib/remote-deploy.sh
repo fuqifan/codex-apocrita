@@ -22,7 +22,11 @@ ca_make_remote_bundle() {
   cp "$source_root"/remote/* "$stage/remote/"
   cp "$source_root"/profiles/cpu.conf "$stage/profiles/cpu.conf"
   cp "$source_root/VERSION" "$stage/VERSION"
-  tar -czf "$output" -C "$stage" .
+  # macOS can attach com.apple.provenance to downloaded repository files.
+  # COPYFILE_DISABLE avoids AppleDouble files; --no-xattrs prevents libarchive
+  # from serializing the provenance attribute into PAX headers that GNU tar on
+  # the remote host would otherwise warn about while extracting.
+  COPYFILE_DISABLE=1 tar --no-xattrs -czf "$output" -C "$stage" .
   rm -rf "$stage"
 }
 

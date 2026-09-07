@@ -30,9 +30,11 @@ The remote `~/.local/bin/codex` is deliberately not the upstream binary. It exam
 - commands containing `app-server` go through `codex-slurm`;
 - ordinary CLI commands go to `codex-direct`.
 
-The official standalone installation remains under `~/.codex/packages/standalone`. `codex-direct` points to its current release, so the integration does not modify OpenAI binaries.
+The official standalone installation remains under `~/.codex/packages/standalone`. `codex-direct` is a small managed wrapper that prepares secure temporary storage and then executes the unmodified current release.
 
 This does mean the remote command named `codex` becomes the dispatcher for the account. Non-`app-server` commands are transparent pass-throughs to `codex-direct`; uninstall removes only the managed dispatcher link.
+
+The integration is not a proxy for the app-server protocol after launch. Once the dispatcher replaces itself with `srun` and the upstream Codex executable, Codex Desktop communicates with the ordinary Codex app-server over the SSH streams it opened. `apo logs` separately uses SSH to tail Codex's own persistent `~/.codex/app-server-control/app-server.log`; it does not read the disposable `~/.codex/tmp` tree or intercept live requests.
 
 ## Allocation attachment
 
@@ -44,17 +46,31 @@ srun --jobid=JOB_ID --overlap --unbuffered --ntasks=1 ...
 
 `--overlap` lets the app-server, proxy, and execution helpers share the same requested allocation. They do not receive resources outside that job.
 
-## Shared temporary directory
+### Linux sandbox compatibility
 
-Apocrita can isolate `/tmp` between Slurm steps. Codex creates temporary process-launch helpers, and subagents may use a different step. If the helpers live in step-local `/tmp`, the second step fails with `No such file or directory`.
+Apocrita exposes its `/data` filesystem through autofs. Compute-node mount metadata can include inactive offset mounts for unrelated paths. Codex's Bubblewrap backend recursively reapplies mount flags and can fail when one of those inactive mountpoints has no directory in the new namespace, even when the selected task uses only the user's home directory.
 
-Every Codex step therefore receives the same private directory:
+The integration deliberately does not work around this by activating unrelated automounts, disabling sandboxing, enabling legacy Landlock, or replacing Bubblewrap with an unreviewed binary. Current Codex Desktop permission profiles require Bubblewrap's direct runtime enforcement and reject the legacy Landlock backend. On affected nodes this is a release blocker that requires an upstream Bubblewrap/Codex fix or an Apocrita mount-configuration change.
+
+## Temporary storage
+
+The integration manages two different kinds of temporary storage.
+
+Every Codex Slurm step receives the same private `TMPDIR`:
 
 ```text
 ~/.local/state/codex-apocrita/tmp/job-JOB_ID
 ```
 
 It is mode `0700`, removed when the job stops, and cleaned after an allocation expires.
+
+Codex also creates internal sandbox aliases beneath `~/.codex/tmp`. That path cannot remain on GPFS: concurrent app-server and proxy processes rely on local file locks while cleaning those aliases, and shared-filesystem locking can let one process remove another process's live helper. The integration therefore manages `~/.codex/tmp` as a symlink to:
+
+```text
+/tmp/codex-apocrita-UID/codex-tmp
+```
+
+The target is a real, user-owned, mode-`0700` directory prepared before every Codex invocation. Because `/tmp` is local, login and compute processes cannot delete one another's helpers. Only disposable Codex temporary state moves there; authentication, configuration, databases, tasks, and the rest of `~/.codex` remain persistent on GPFS. Uninstall removes the managed symlink and restores an ordinary private `~/.codex/tmp` directory.
 
 ## Remote shell wrapper
 

@@ -8,6 +8,29 @@ ca_ssh_values() {
   ssh -G "$1" 2>/dev/null | awk -v key="$2" '$1 == key { $1=""; sub(/^ /, ""); print }'
 }
 
+ca_detect_apocrita_base_host() {
+  local config="${1:-$HOME/.ssh/config}" excluded="${2:-apocrita-codex}"
+  local candidates candidate hostname vscode_candidate=''
+  [[ -r "$config" ]] || return 1
+  candidates=$(awk '
+    $1 == "Host" {
+      for (i=2; i<=NF; i++) {
+        if ($i !~ /[*?!]/ && !seen[$i]++) print $i
+      }
+    }
+  ' "$config")
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" && "$candidate" != "$excluded" ]] || continue
+    hostname=$(ca_ssh_value "$candidate" hostname)
+    case "$hostname" in
+      login.hpc.qmul.ac.uk) printf '%s\n' "$candidate"; return 0 ;;
+      vscode.hpc.qmul.ac.uk) [[ -n "$vscode_candidate" ]] || vscode_candidate="$candidate" ;;
+    esac
+  done <<< "$candidates"
+  [[ -n "$vscode_candidate" ]] || return 1
+  printf '%s\n' "$vscode_candidate"
+}
+
 ca_render_ssh_fragment() {
   local base="$1" alias="$2" endpoint="$3" output="$4"
   local user port identity

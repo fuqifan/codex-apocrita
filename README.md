@@ -24,14 +24,14 @@ cd codex-apocrita
 ./install.sh
 ```
 
-The installer explains each choice. Its defaults are:
+The installer detects a likely existing Apocrita SSH alias when possible and explains each choice. Its defaults are:
 
 - local command: `apo`;
 - Codex SSH host: `apocrita-codex`;
 - endpoint: `login.hpc.qmul.ac.uk`;
-- sample job: 2 CPUs, 8G memory, 4 hours on `compute`.
+- default job: 2 CPUs, 8G memory, 4 hours on `compute`.
 
-The sample job is intentionally lean. Change it for your work; an eight-hour limit may be more convenient for a full working day.
+The default job is intentionally lean. Change it for your work; an eight-hour limit may be more convenient for a full working day.
 
 The installer will ask for your normal Apocrita authentication to establish a reusable SSH connection. It may then show a Codex device code. It never records either credential.
 
@@ -55,14 +55,16 @@ apo
 Wait until the job reports `Ready`. Then in Codex Desktop:
 
 1. Open **Settings → Connections → SSH**.
-2. Enable or add `apocrita-codex` (or the SSH alias you chose).
-3. Choose a project folder on Apocrita.
+2. Enable or add the new `apocrita-codex` connection (or the new alias you chose during setup). Do not select your usual `apocrita` login or VS Code connection.
+3. Start a new task, choose **New remote project**, select `apocrita-codex`, select any Apocrita workspace, and click **Add project**.
 
-You can verify placement by asking Codex to run a command in the terminal:
+Generate a verification prompt from the resources currently stored in your profile, then paste it into the new task:
 
-> Run hostname, print `$SLURM_JOB_ID`, show `/proc/self/cgroup`, and show `Cpus_allowed_list` from `/proc/self/status`.
+```bash
+apo test-prompt
+```
 
-The hostname should be a compute node and the job ID should match `apo status`.
+Codex must return one JSON object. The root agent and its subagent should share the compute node, Slurm job, CPU allocation, and temporary directory; every check should be `true`.
 
 ## Where your work runs
 
@@ -82,7 +84,7 @@ apo off             # stop the job and SSH connection
 apo doctor --runtime
 ```
 
-Change the sample profile:
+Change the default profile:
 
 ```bash
 apo config show cpu

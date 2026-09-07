@@ -8,9 +8,15 @@ remote_root="$HOME/.local/share/codex-apocrita"
 state_root="${XDG_STATE_HOME:-$HOME/.local/state}/codex-apocrita"
 config_root="${XDG_CONFIG_HOME:-$HOME/.config}/codex-apocrita"
 job_tool="$remote_root/current/remote/codex-slurm-job"
+runtime_common="$remote_root/current/remote/codex-runtime-common"
 
 [[ "$(id -u)" -ne 0 ]] || { echo 'Refusing to run as root.' >&2; exit 1; }
 if [[ -x "$job_tool" ]]; then "$job_tool" stop || true; fi
+if [[ -r "$runtime_common" ]]; then
+  # shellcheck source=codex-runtime-common
+  source "$runtime_common"
+  ca_remove_codex_tmp_link
+fi
 
 for link in "$HOME/.local/bin/codex" "$HOME/.local/bin/codex-direct" "$HOME/.local/bin/codex-apocrita-login-shell"; do
   if [[ -L "$link" ]]; then

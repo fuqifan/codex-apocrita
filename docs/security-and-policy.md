@@ -14,6 +14,8 @@ The installers and runtime:
 - verify uploaded Codex packages with SHA-256;
 - preserve backups before editing SSH or shell configuration.
 
+The project keeps persistent Codex data in `~/.codex` on GPFS. It relocates only the disposable `~/.codex/tmp` subtree to a node-local `/tmp/codex-apocrita-UID` directory. The runtime rejects non-directory or incorrectly owned targets and enforces mode `0700` before launching Codex.
+
 The generated SSH master exists only to reuse authentication already completed by the user. Anyone able to access its local control socket can use that authenticated connection, so protect your local account and `~/.ssh` directory.
 
 ## Resource model

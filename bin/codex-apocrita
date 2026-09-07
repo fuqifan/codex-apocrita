@@ -61,12 +61,65 @@ start_profile() {
   remote "$REMOTE_ROOT/codex-slurm-job start $(printf '%q' "$profile") && $REMOTE_ROOT/codex-slurm-job wait"
 }
 
+show_test_prompt() {
+  local profile="${1:-cpu}" profile_data cpus memory time
+  profile_name_ok "$profile" || ca_die "Invalid profile name: $profile"
+  require_ssh
+  profile_data=$(remote "$REMOTE_ROOT/codex-slurm-job profile-show $(printf '%q' "$profile")")
+  cpus=$(awk -F= '$1=="CPUS_PER_TASK" || $1=="CPUS_PER_GPU" {print $2; exit}' <<< "$profile_data")
+  memory=$(awk -F= '$1=="MEM" {print $2; exit} $1=="MEM_PER_CPU" {print $2 "/CPU"; exit}' <<< "$profile_data")
+  time=$(awk -F= '$1=="TIME" {print $2; exit}' <<< "$profile_data")
+  [[ "$cpus" =~ ^[1-9][0-9]*$ ]] || ca_die "Profile '$profile' has no supported CPU setting."
+  [[ -n "$memory" ]] || memory='not specified'
+  [[ -n "$time" ]] || time='not specified'
+  cat <<EOF
+Perform this verification exactly.
+
+1. First, in the root agent, independently execute commands to collect hostname,
+   SLURM_JOB_ID, the complete contents of /proc/self/cgroup,
+   Cpus_allowed_list from /proc/self/status, and TMPDIR. Count the logical CPUs
+   represented by Cpus_allowed_list, expanding comma-separated ranges. Complete
+   this probe and retain its result before spawning the subagent. Use only these
+   installed utilities: /bin/hostname, /usr/bin/printenv, /bin/cat, and
+   /usr/bin/awk. Do not use Node.js, Python, Perl, Ruby, or another interpreter.
+2. Then spawn exactly one subagent. Require it to independently execute commands to
+   collect the same fields and return exactly one JSON object with no Markdown.
+   Do not copy the root agent's values into the subagent result. Wait for the
+   subagent to finish; if the tool requires a timeout, use at least 10000 ms.
+   Require the subagent to use only /bin/hostname, /usr/bin/printenv, /bin/cat,
+   and /usr/bin/awk, with no Node.js, Python, Perl, Ruby, or other interpreter.
+   The exact data-collection commands for both probes are:
+     /bin/hostname
+     /usr/bin/printenv SLURM_JOB_ID
+     /bin/cat /proc/self/cgroup
+     /usr/bin/awk -F: '\$1=="Cpus_allowed_list" {sub(/^[[:space:]]+/,"",\$2); print \$2}' /proc/self/status
+     /usr/bin/printenv TMPDIR
+3. Use only normal default sandboxed command execution for both probes. Do not
+   request approval and do not use an elevated, escalated, or unsandboxed
+   fallback. If one probe's default execution fails, report empty values only
+   for that probe and mark its execution check false; do not discard a successful
+   result from the other probe and do not work around the failure. A subagent
+   orchestration error is not a root execution failure.
+4. Return exactly one single-line JSON object matching the schema below. Use
+   JSON strings for textual values, JSON integers for CPU counts, and JSON
+   booleans for checks. Do not use a Markdown fence or include any other text.
+
+Expected profile values were generated from the installed "$profile" profile:
+{"cpu_count":$cpus,"memory":"$memory","time_limit":"$time"}
+
+Required output schema:
+{"expected":{"cpu_count":$cpus,"memory":"$memory","time_limit":"$time"},"root":{"hostname":"string","slurm_job_id":"string","cgroup":"string","cpus_allowed_list":"string","cpu_count":0,"tmpdir":"string"},"subagent":{"hostname":"string","slurm_job_id":"string","cgroup":"string","cpus_allowed_list":"string","cpu_count":0,"tmpdir":"string"},"checks":{"root_default_exec_succeeded":false,"subagent_default_exec_succeeded":false,"fallback_used":false,"same_hostname":false,"same_slurm_job_id":false,"job_id_present_in_root_cgroup":false,"job_id_present_in_subagent_cgroup":false,"same_tmpdir":false,"root_cpu_count_matches_profile":false,"subagent_cpu_count_matches_profile":false,"all_checks_pass":false}}
+EOF
+}
+
 show_help() {
   cat <<EOF
 Usage:
   $CA_COMMAND_NAME                         Start or reuse the default CPU job
   $CA_COMMAND_NAME start [PROFILE]         Start or reuse a profile
   $CA_COMMAND_NAME switch PROFILE          Stop the current job and switch profiles
+  $CA_COMMAND_NAME force                   Restart SSH only; allocation is unchanged
+  $CA_COMMAND_NAME restart [PROFILE]       Confirm and replace the allocation
   $CA_COMMAND_NAME status                  Show SSH and Slurm status
   $CA_COMMAND_NAME stop                    Stop the Slurm job
   $CA_COMMAND_NAME off                     Stop the job and SSH connection
@@ -81,6 +134,7 @@ Profiles:
 Maintenance:
   $CA_COMMAND_NAME ssh [start|status|force|off]
   $CA_COMMAND_NAME doctor [--runtime]
+  $CA_COMMAND_NAME test-prompt [PROFILE]
   $CA_COMMAND_NAME logs [LINES]
   $CA_COMMAND_NAME clean
   $CA_COMMAND_NAME update
@@ -101,6 +155,17 @@ case "$command" in
     ca_confirm "Stop the current allocation and switch to '$2'?" || ca_die 'Switch cancelled.'
     remote "$REMOTE_ROOT/codex-slurm-job stop"
     start_profile "$2"
+    ;;
+  force)
+    "$0" ssh force
+    ;;
+  restart)
+    profile="${2:-cpu}"
+    profile_name_ok "$profile" || ca_die "Invalid profile name: $profile"
+    require_ssh
+    ca_confirm "Stop the current allocation and start a new '$profile' allocation?" || ca_die 'Restart cancelled.'
+    remote "$REMOTE_ROOT/codex-slurm-job stop"
+    start_profile "$profile"
     ;;
   status)
     if ssh_healthy; then
@@ -180,7 +245,16 @@ case "$command" in
       "$(ssh -G "$CA_SSH_ALIAS" 2>/dev/null | awk '$1=="port"{print $2;exit}')"
     require_ssh
     remote "$REMOTE_ROOT/install-remote.sh --doctor"
-    [[ "${2:-}" == --runtime ]] && remote "$REMOTE_ROOT/codex-slurm-job runtime-check"
+    if [[ "${2:-}" == --runtime ]]; then
+      remote "$REMOTE_ROOT/codex-slurm-job runtime-check"
+    fi
+    ;;
+  test-prompt)
+    show_test_prompt "${2:-cpu}"
+    ;;
+  __complete)
+    [[ "${2:-}" == profiles ]] || exit 2
+    if ssh_healthy; then remote "$REMOTE_ROOT/codex-slurm-job profile-names"; fi
     ;;
   logs)
     require_ssh

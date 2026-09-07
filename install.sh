@@ -9,6 +9,7 @@ source "$SOURCE_ROOT/lib/codex-release.sh"
 source "$SOURCE_ROOT/lib/remote-deploy.sh"
 
 base_host=apocrita
+base_host_supplied=0
 ssh_alias=apocrita-codex
 command_name=apo
 endpoint=login.hpc.qmul.ac.uk
@@ -28,7 +29,7 @@ usage() {
 Usage: ./install.sh [options]
 
 Connection:
-  --base-host NAME           Existing SSH alias to copy credentials from (apocrita)
+  --base-host NAME           Existing SSH alias (auto-detected; fallback: apocrita)
   --ssh-alias NAME           New Codex Desktop alias (apocrita-codex)
   --endpoint login|vscode|HOST
   --command-name NAME        Installed local command (apo)
@@ -53,7 +54,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base-host) base_host="$2"; shift ;; --ssh-alias) ssh_alias="$2"; shift ;;
+    --base-host) base_host="$2"; base_host_supplied=1; shift ;; --ssh-alias) ssh_alias="$2"; shift ;;
     --command-name) command_name="$2"; shift ;; --endpoint) endpoint="$2"; shift ;;
     --partition) partition="$2"; shift ;; --cpus) cpus="$2"; shift ;;
     --memory) memory="$2"; shift ;; --time) walltime="$2"; shift ;;
@@ -76,28 +77,46 @@ fi
 case "$endpoint" in login) endpoint=login.hpc.qmul.ac.uk ;; vscode) endpoint=vscode.hpc.qmul.ac.uk ;; esac
 
 prompt_value() {
-  local label="$1" current="$2" explanation="$3" answer
+  local label="$1" prompt="$2" current="$3" explanation="$4" notice="${5:-}" answer
   [[ "$CA_ASSUME_YES" == 1 ]] && { printf '%s\n' "$current"; return; }
-  printf '\n%s\n%s\nValue [%s]: ' "$label" "$explanation" "$current" >&2
+  if [[ -t 2 && "${TERM:-dumb}" != dumb ]]; then
+    printf '\n\033[1m== %s ==\033[0m\n\n' "$label" >&2
+  else
+    printf '\n== %s ==\n\n' "$label" >&2
+  fi
+  printf '%s\n' "$explanation" >&2
+  [[ -z "$notice" ]] || printf '\n%s\n' "$notice" >&2
+  printf '\n%s [default: %s]: ' "$prompt" "$current" >&2
   IFS= read -r answer; printf '%s\n' "${answer:-$current}"
 }
 
 if [[ "$CA_ASSUME_YES" != 1 && -z "$from_config" ]]; then
+  detected_base_host=''
+  if [[ "$base_host_supplied" != 1 ]]; then
+    detected_base_host=$(ca_detect_apocrita_base_host "$HOME/.ssh/config" "$ssh_alias" 2>/dev/null || true)
+    [[ -z "$detected_base_host" ]] || base_host="$detected_base_host"
+  fi
   cat <<'EOF'
-codex-apocrita setup
+Codex Desktop on Apocrita — Setup
 
-This creates a stable SSH name for Codex Desktop and runs its remote backend
-inside a Slurm allocation. It does not SSH to compute nodes directly.
+This setup connects Codex Desktop to Apocrita and runs its remote backend
+inside a Slurm allocation instead of SSHing directly to compute nodes.
+
+Press Enter at any prompt to keep the displayed default.
 EOF
-  base_host=$(prompt_value 'Existing SSH host' "$base_host" 'An alias already present in ~/.ssh/config. Its username and private-key settings will be copied.')
-  ssh_alias=$(prompt_value 'Codex SSH alias' "$ssh_alias" 'This is the host name you will enable in Codex Desktop. You may choose another unused alias.')
-  command_name=$(prompt_value 'Local command' "$command_name" 'This is the short terminal command used to start, inspect, and stop the allocation.')
-  endpoint_choice=$(prompt_value 'Endpoint' login 'Choose login (recommended/stable), vscode (may tolerate more sessions but can lag under load), or enter a custom authorized login-compatible hostname. Never enter a compute node.')
+  base_host_notice='No matching alias was detected, so the fallback below is suggested. Replace it if your existing alias has another name.'
+  if [[ -n "$detected_base_host" ]]; then
+    base_host_notice="Detected an existing Apocrita SSH alias: $detected_base_host"
+  fi
+  base_host=$(prompt_value 'Existing SSH alias' 'Existing SSH alias' "$base_host" 'The installer searches ~/.ssh/config for an existing alias that connects to an Apocrita login or VS Code gateway. Enter the Host alias you already use; its effective username, private-key path, and SSH port will be copied into the new Codex connection.' "$base_host_notice")
+  ssh_alias=$(prompt_value 'Codex SSH alias' 'New SSH alias' "$ssh_alias" 'This is the new SSH alias that you will enable in Codex Desktop. Choose an unused name, or press Enter to use the recommended default.')
+  command_name=$(prompt_value 'Local command' 'Command name' "$command_name" 'This is the terminal command used to start, inspect, configure, and stop the Codex Slurm allocation.')
+  endpoint_choice=$(prompt_value 'Login gateway' 'Gateway' login $'Codex needs a login-compatible Apocrita gateway to submit the Slurm job and act as a bridge to the allocated compute node.\n\nAvailable choices:\n  login     login.hpc.qmul.ac.uk — recommended and normally the most stable\n  vscode    vscode.hpc.qmul.ac.uk — an alternative that may be busier\n  HOSTNAME  another authorized login-compatible gateway\n\nNever enter a compute-node hostname.')
   case "$endpoint_choice" in login) endpoint=login.hpc.qmul.ac.uk ;; vscode) endpoint=vscode.hpc.qmul.ac.uk ;; *) endpoint="$endpoint_choice" ;; esac
-  partition=$(prompt_value 'CPU partition' "$partition" 'The default compute profile is only a sample; adjust it for your workflow.')
-  cpus=$(prompt_value 'CPU count' "$cpus" 'Two CPUs are a lean default for the Codex backend and ordinary development tools.')
-  memory=$(prompt_value 'Memory' "$memory" '8G is a lean default. Increase it for memory-intensive builds or analysis.')
-  walltime=$(prompt_value 'Wall time' "$walltime" 'Four hours is a sample. Eight hours may fit a full working day better.')
+  partition=$(prompt_value 'Default Slurm partition' 'Partition' "$partition" 'This is the partition where the default Codex job will run. The recommended choice is compute, which is available to all Apocrita users. You can create additional profiles later for partitions such as computeshort, sae, andrena, or apini when needed and when your account has access.')
+  cpus=$(prompt_value 'Default CPU cores' 'CPU cores' "$cpus" 'This is the number of CPU cores available to the Codex Desktop backend, its agents and subagents, and commands they run in the default job. You can edit this profile or create profiles with different resources later.')
+  memory=$(prompt_value 'Default memory' 'Memory' "$memory" 'This is the total memory available to the Codex Desktop backend, its agents and subagents, and commands they run in the default job. You can edit this profile or create larger profiles later.')
+  walltime=$(prompt_value 'Default wall-time limit' 'Wall time' "$walltime" 'This is the maximum time the default Codex job may remain running. Four hours may be sufficient for ordinary sessions; eight hours may be more convenient for a full working day.')
 fi
 
 ca_validate_name "$base_host" || ca_die 'Invalid base SSH host name.'
@@ -118,19 +137,25 @@ if [[ ! -f "$HOME/.ssh/codex-apocrita.conf" && -f "$HOME/.ssh/config" ]] &&
    awk -v wanted="$ssh_alias" '$1=="Host" {for(i=2;i<=NF;i++) if($i==wanted) found=1} END{exit !found}' "$HOME/.ssh/config"; then
   ca_die "SSH alias '$ssh_alias' already exists outside the managed fragment. Choose --ssh-alias NAME."
 fi
-cat <<EOF
-
-Installation plan
-  command:       $command_name
-  SSH alias:     $ssh_alias
-  endpoint:      $endpoint
-  base identity: $base_host
-  CPU profile:   $partition, $cpus CPUs, $memory, $walltime
-  Codex install: $install_mode, user-local only
-  authentication: $([[ "$skip_auth" == 1 ]] && echo skipped || echo device-code login)
-
-No sudo command will be run. No SSH password or Codex token will be copied.
-EOF
+auth_summary='Existing login or device code'
+[[ "$skip_auth" == 1 ]] && auth_summary='skip the Codex login check'
+printf '\nInstallation plan\n\n'
+printf '  %-20s %-34s %s\n' 'Setting' 'Selected value' 'Purpose'
+printf '  %-20s %-34s %s\n' 'Local command' "$command_name" 'Manage the SSH connection and Slurm job'
+printf '  %-20s %-34s %s\n' 'Codex SSH alias' "$ssh_alias" 'Enable this connection in Codex Desktop'
+printf '  %-20s %-34s %s\n' 'Login gateway' "$endpoint" 'Submit the job and bridge Codex to it'
+printf '  %-20s %-34s %s\n' 'Existing SSH alias' "$base_host" 'Copy the effective user, key, and port'
+if [[ "$preserve_profile" == 1 ]]; then
+  printf '  %-20s %-34s %s\n' 'CPU profile' 'Preserve installed values' 'Leave the remote profile unchanged'
+else
+  printf '  %-20s %-34s %s\n' 'Slurm partition' "$partition" 'Run the default Codex job here'
+  printf '  %-20s %-34s %s\n' 'CPU cores' "$cpus" 'Limit the default job to this CPU allocation'
+  printf '  %-20s %-34s %s\n' 'Memory' "$memory" 'Limit the default job to this memory allocation'
+  printf '  %-20s %-34s %s\n' 'Wall-time limit' "$walltime" 'Set the maximum default job duration'
+fi
+printf '  %-20s %-34s %s\n' 'Codex installation' "$install_mode, user-local" 'Install in your home directory without sudo'
+printf '  %-20s %-34s %s\n' 'Authentication' "$auth_summary" 'Use remote Codex authentication'
+printf '\nNo sudo command will be run. No SSH password or Codex token will be copied.\n'
 
 if [[ "$dry_run" == 1 ]]; then
   echo; echo 'Generated SSH fragment:'; cat "$CA_SSH_FRAGMENT_TMP"; rm -f "$CA_SSH_FRAGMENT_TMP"; exit
@@ -206,6 +231,17 @@ EOF
       {print}
     ' "$file" > "$tmp"
     mv "$tmp" "$file"
+  else
+    tmp=$(mktemp "${TMPDIR:-/tmp}/codex-apocrita-bash.XXXXXX")
+    awk -v command="$command_name" '
+      $0=="# <<< codex-apocrita <<<" {
+        print "completion=\"$HOME/.local/share/bash-completion/completions/" command "\""
+        print "[[ -r \"$completion\" ]] && source \"$completion\""
+        print "unset completion"
+      }
+      {print}
+    ' "$file" > "$tmp"
+    mv "$tmp" "$file"
   fi
 }
 case "${SHELL:-}" in */zsh) install_shell_block "$HOME/.zshrc" zsh ;; *) install_shell_block "$HOME/.bashrc" bash ;; esac
@@ -228,6 +264,20 @@ Installation complete.
 Open a new terminal (or export PATH="\$HOME/.local/bin:\$PATH"), then run:
   $command_name doctor
   $command_name
+  $command_name doctor --runtime
 
-In Codex Desktop, open Settings > Connections and enable: $ssh_alias
+In Codex Desktop, open Settings > Connections and enable the new connection:
+  $ssh_alias
+
+Optional: verify the complete Codex Desktop integration
+  1. Start a new task and choose New remote project.
+  2. Select $ssh_alias, choose an Apocrita workspace, and click Add project.
+  3. In your local terminal, run: $command_name test-prompt
+  4. Copy the complete generated prompt into the new Codex task.
+
+The resulting JSON should end with "all_checks_pass":true.
+
+Shell completion was installed. In a new terminal, type "$command_name " and
+press Tab to see available commands, profiles, and resource settings. You can
+also run "$command_name --help" or "$command_name -h" at any time.
 EOF

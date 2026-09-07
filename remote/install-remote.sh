@@ -9,6 +9,9 @@ upstream_bin="$remote_root/upstream-bin"
 package_archive='' package_digest='' package_version='' package_target=''
 mode=install
 
+# shellcheck source=codex-runtime-common
+source "$(dirname "$0")/codex-runtime-common"
+
 die() { echo "codex-apocrita remote installer: $*" >&2; exit 1; }
 [[ "$(id -u)" -ne 0 ]] || die 'Refusing to run as root. This installer never uses sudo.'
 
@@ -30,6 +33,10 @@ sha256_file() {
   elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
   else openssl dgst -sha256 "$1" | sed 's/^.*= //'; fi
 }
+
+mkdir -p "$remote_root/releases" "$state_root" "$config_root/profiles" "$HOME/.local/bin" "$upstream_bin"
+chmod 700 "$remote_root" "$state_root" "$config_root"
+ca_prepare_codex_tmp
 
 if [[ "$mode" == doctor ]]; then
   failed=0
@@ -71,8 +78,6 @@ install_uploaded_package() {
   ln -sfn "$HOME/.codex/packages/standalone/current/bin/codex" "$upstream_bin/codex"
 }
 
-mkdir -p "$remote_root/releases" "$state_root" "$config_root/profiles" "$HOME/.local/bin" "$upstream_bin"
-chmod 700 "$remote_root" "$state_root" "$config_root"
 if [[ -n "$package_archive" ]]; then install_uploaded_package
 else install_official_online || die 'Online Codex installation failed. Re-run the local installer with --remote-install-mode upload.'
 fi
@@ -88,14 +93,14 @@ if [[ -L "$remote_root/current" ]]; then ln -sfn "$(readlink "$remote_root/curre
 ln -sfn "$release_dir" "$remote_root/current"
 
 backup_conflict() {
-  local path="$1" expected="$2" target=''
+  local path="$1" expected="$2" alternate="${3:-}" target=''
   [[ -L "$path" ]] && target=$(readlink "$path")
-  [[ ! -e "$path" && ! -L "$path" || "$target" == *"$expected"* ]] && return
+  [[ ! -e "$path" && ! -L "$path" || "$target" == *"$expected"* || -n "$alternate" && "$target" == *"$alternate"* ]] && return
   mv "$path" "$path.codex-apocrita.$(date +%Y%m%d-%H%M%S).bak"
 }
-backup_conflict "$HOME/.local/bin/codex-direct" 'packages/standalone/current'
+backup_conflict "$HOME/.local/bin/codex-direct" 'codex-apocrita/current/remote/codex-direct' 'packages/standalone/current'
 backup_conflict "$HOME/.local/bin/codex" 'codex-apocrita/current'
-ln -sfn "$HOME/.codex/packages/standalone/current/bin/codex" "$HOME/.local/bin/codex-direct"
+ln -sfn "$remote_root/current/remote/codex-direct" "$HOME/.local/bin/codex-direct"
 ln -sfn "$remote_root/current/remote/codex-dispatch" "$HOME/.local/bin/codex"
 ln -sfn "$remote_root/current/remote/codex-login-shell" "$HOME/.local/bin/codex-apocrita-login-shell"
 

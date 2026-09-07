@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+remote_root="$HOME/.local/share/codex-apocrita"
+# shellcheck source=codex-runtime-common
+source "$remote_root/current/remote/codex-runtime-common"
+ca_prepare_codex_tmp
+
+upstream="$remote_root/upstream-bin/codex"
+[[ -x "$upstream" ]] || { echo "Codex upstream executable is missing: $upstream" >&2; exit 1; }
+exec "$upstream" "$@"

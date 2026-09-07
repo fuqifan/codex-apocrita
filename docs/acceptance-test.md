@@ -10,11 +10,13 @@
 ## Runtime placement
 
 1. Run `apo` and wait for the allocation.
-2. Enable the generated alias in Codex Desktop and open a project in the shared Apocrita filesystem.
-3. In the root agent, collect `hostname`, `SLURM_JOB_ID`, `/proc/self/cgroup`, `Cpus_allowed_list`, and `TMPDIR`.
-4. Spawn at least two subagents and collect the same values from each.
-5. Confirm every process reports the same job ID, a Slurm cgroup for that job, CPUs within the requested allocation, and the same private `~/.local/state/codex-apocrita/tmp/job-JOB_ID` directory.
-6. Confirm ordinary file editing and terminal commands work from both root and subagent contexts.
+2. Enable the generated Codex-specific alias in Codex Desktop, not the account's usual login or VS Code alias, and add a new remote project in the shared Apocrita filesystem.
+3. Run `apo test-prompt`, paste the complete generated prompt into the new task, and confirm it returns exactly one JSON object.
+4. Confirm the root agent and exactly one subagent report the same job ID, a Slurm cgroup for that job, the requested CPU count, and the same private `~/.local/state/codex-apocrita/tmp/job-JOB_ID` directory.
+5. Confirm both default-execution fields and `checks.all_checks_pass` are `true`, and `fallback_used` is `false`.
+6. Confirm `apo logs 200` contains no new `CreateProcess`, `ENOENT`, or Bubblewrap mount errors.
+7. While Desktop remains connected, run `apo doctor`, then repeat the prompt and confirm login-node diagnostics did not remove the compute app-server's helpers.
+8. Repeat the complete runtime placement test on a second fresh allocation before release.
 
 ## Failure and lifecycle paths
 
