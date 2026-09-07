@@ -263,6 +263,9 @@ the exact scope of any untested item.
 
 ## Evidence and limits
 
+The [dated acceptance record](windows-live-acceptance.md) separates completed
+local checks from the remaining live Desktop acceptance steps.
+
 The design comes from an integration exercised on Windows x64, PowerShell 5.1/7,
 WSL Ubuntu, Linux OpenSSH, and a Slurm-backed app-server. The generalized source
 needs its own installation acceptance: success of an earlier machine-specific
