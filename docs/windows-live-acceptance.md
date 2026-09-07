@@ -1,10 +1,11 @@
 # Windows acceptance record, updated 2026-09-08
 
 Status: local regression checks, a fresh-build SSH check, actual adapter
-installation, and upstream runtime activation passed. The first Desktop launch
-failed identity validation during a Store package update. A launcher correction
-has passed local checks; a successful live launch and the remaining Desktop
-acceptance are **still pending**.
+installation, upstream runtime activation, corrected Desktop launch, and Desktop
+SSH connection passed. Two concurrent documentation turns completed with real
+subagent review on that runtime. The first launch failure during a Store update
+is preserved below. Desktop display confirmation, a second restart/reconnect,
+and actual rollback acceptance are **still pending**.
 This record is not a recommendation to merge before those live checks finish.
 
 ## Candidate and backend scope
@@ -16,7 +17,8 @@ scripts, and libraries have no changes relative to that base.
 
 The original clean build and installation used commit
 `95ccdf1923803b20921e35a82a091945ee0ef027`. The 2026-09-08 follow-up changes only
-the launcher, its local regression coverage, CI wiring, and documentation. Live
+the launcher, its local regression coverage, CI wiring, and documentation; that
+correction is committed as `ca9a127a7fe5ba91eb7480a6ccd8874bafd5703c`. Live
 retries use this launcher correction on the original clean installation; the
 executable and installed profile hook are unchanged. The old backend proxy/version-home isolation
 changes are absent from this branch and are retained only in a separate
@@ -89,8 +91,49 @@ metadata-only launch receipts. A Store update can still race activation; the
 launcher fails closed and asks for normal Quit/retry rather than adopting a
 different process. Local tests cover the update mismatch, failed identity reads,
 stale processes, and receipt/lease-write failures under strict error preferences.
-No test activated Desktop or accessed HPC. A successful live retry has not yet
-been observed, so this failure is not recorded as a passed launch.
+No local fixture activated Desktop or accessed HPC. The original failed attempt
+remains a failure; the subsequent manual retry is recorded separately below.
+
+## Successful manual retry and ordinary task work
+
+The user normally quit Desktop, reran the corrected candidate launcher, and
+received `DESKTOP_STARTED_PROFILE_APPLIED` for Store package `26.901.6511.0`.
+The user then confirmed that the SSH connection was connected. Independent local
+inspection matched the new Desktop process identity/start time to the lease,
+launch receipt, and `APPLIED` handshake. A running candidate adapter was a direct
+child of that Desktop process. Its binary/configuration hashes matched the lease.
+The launch receipt reported successful activation and package identity queries.
+
+The launcher reports `remoteTransportVerified=false` because it verifies its
+scoped environment only. The separate Desktop observation, live adapter process,
+transport records, and login-side backend checks supply the SSH evidence.
+Adapter logs deliberately omit PID/ancestry, so an individual log invocation ID
+cannot be joined directly to an OS process ID; that join is not claimed.
+
+Login-side inspection before and after the task work verified the same listener
+and proxy steps in the existing owned, running CPU-only allocation. Their reviewed
+arguments and runtime hashes matched the unmodified upstream release. No backend
+proxy-home/version-isolation comparison patch was enabled for these turns.
+The independent scientific submission worker remained stopped.
+
+Two existing documentation tasks were resumed for one bounded turn each. Their
+observed execution windows overlapped by approximately 228 seconds. Both performed
+normal source/document reading, wrote three new English Markdown documents in
+separate dated deliverable directories, incorporated an independent subagent's
+review, and reread their files. Each root's rollout records an actual reviewer
+spawn and subsequent exchanges, with a canonical reviewer name returned by the
+tool. Separate numeric reviewer IDs are not claimed. All six files were then read
+through the login-side control path and recorded with sizes and SHA-256 hashes.
+Both turns completed and became idle. Scientific Goals were not resumed, and no
+scientific test, benchmark, training, or compute-node probe was part of this work.
+
+An observation-tool limitation was found: `read_thread` returned an empty item
+list for these new turns, and `wait_threads` reported completion without final
+text, while the scoped remote rollout files contained the actual replies and
+tool events. This was not treated as proof that the agents had done no work.
+The six produced files and saved final replies establish the documentation
+outcome. User confirmation of their display in Desktop is still pending; no
+claim is made that the observation-API discrepancy is fixed.
 
 ## Live checks still required
 
@@ -99,11 +142,12 @@ been observed, so this failure is not recorded as a passed launch.
 | Build adapter from clean committed source | Passed |
 | Install into the actual Desktop profile environment | Passed; actual installation postconditions verified |
 | Activate unmodified upstream runtime | Passed; actual activation postconditions verified |
-| Launch Desktop through the new adapter | First attempt failed on package update; corrected retry pending |
-| Connect Desktop to the rebased upstream runtime | Pending |
-| Normal root command and file work | Pending on that exact runtime |
-| Normal subagent command and file work | Pending on that exact runtime |
-| Two concurrent Desktop tasks | Pending on that exact runtime |
+| Launch Desktop through the new adapter | Passed on corrected manual retry; original update-race failure retained |
+| Connect Desktop to the rebased upstream runtime | Passed; user observation and local/login-side correlation |
+| Normal root command and file work | Passed; two completed documentation turns and six verified files |
+| Normal subagent command and file work | Passed; independent document reads/reviews for both roots |
+| Two concurrent Desktop tasks | Passed for bounded documentation work; approximately 228 seconds of overlap |
+| Latest task replies visible in Desktop | Pending user confirmation; observation APIs returned empty items |
 | Fully restart Desktop and resume the same tasks | Pending |
 | Roll back actual profile integration and restore the previous route | Pending; fixtures alone passed |
 
