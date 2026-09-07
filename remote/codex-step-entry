@@ -35,10 +35,11 @@ if "$proxy"; then
     if [[ ! -e "$directory" ]]; then mkdir -p -- "$directory"; fi
     [[ -d "$directory" && -O "$directory" ]] || die 'Proxy state directory must be user-owned.'
   done
-  chmod 700 -- "$state_root/proxy-homes" "$proxy_root"
+  # All operands are checked absolute paths; keep the portable mode/file syntax.
+  chmod 700 "$state_root/proxy-homes" "$proxy_root"
   proxy_home=$(mktemp -d "$proxy_root/request.XXXXXXXXXXXX")
   [[ -d "$proxy_home" && ! -L "$proxy_home" && -O "$proxy_home" ]] || die 'Could not create a private proxy home.'
-  chmod 700 -- "$proxy_home"
+  chmod 700 "$proxy_home"
   export CODEX_HOME="$proxy_home"
   # Resolve the real listener socket before changing the client-only home.
   # The listener retains all configuration, credentials, sessions and Goals.

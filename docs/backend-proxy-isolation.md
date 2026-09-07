@@ -1,5 +1,49 @@
 # Isolate short-lived Codex clients from the listener home
 
+## Experimental comparison after the node-local temporary-directory fix
+
+This branch keeps the previous transient-client isolation changes available for
+comparison against upstream commit `29448229bcf1cca4aaf2f0fc61e713ad9f57bfba`.
+It is separate from the Windows adapter contribution: the Windows support PR
+does not include or install these backend changes and uses the updated upstream
+runtime. No result in this document establishes that this additional isolation
+is still needed after the upstream temporary-directory fix. Test the upstream
+runtime first, with the local synthetic and live integration results reported
+separately.
+
+Upstream now prepares `$HOME/.codex/tmp` as a link to node-local temporary
+storage before each managed Codex invocation. This comparison changes
+`CODEX_HOME` for version queries and proxies, while leaving `HOME` unchanged.
+The upstream helper uses `HOME`, not `CODEX_HOME`: it therefore still prepares
+the original `$HOME/.codex/tmp`, but does not relocate the isolated clients'
+`CODEX_HOME/tmp` directories. Those client directories remain beneath the shared
+state directory described below. This branch compares a different isolation
+approach; it does not provide node-local temporary storage for every transient
+client.
+
+**Proxy homes are retained after exit and are not automatically cleaned.**
+Neither this comparison branch nor its tests resolve that lifecycle limitation.
+Any manual cleanup must first establish that the associated allocation and
+client processes are inactive, then review only the owned managed paths. Do not
+remove homes on age alone, after an ambiguous scheduler query, or while any
+associated process may still hold a helper. The Windows adapter requires no
+such proxy-home cleanup because it does not install this workaround.
+
+The historical implementation rationale and validation below describe the
+isolation patch itself. They are not a live acceptance result for the rebased
+comparison or a recommendation to deploy it.
+
+Local validation after rebasing, on 2026-09-07, passed the isolation suite:
+32 tests ran, with 29 passing and three foreign-owner cases explicitly skipped
+under an ordinary WSL user. The dispatcher, fake-Slurm, and upstream
+temporary-directory shell fixtures also passed. The isolation suite replaces
+`codex-direct` with a mock; the temporary-directory fixture exercises the new
+upstream wrapper separately. These results do not test their combined behavior
+with a real Codex executable or establish live HPC acceptance. No installed
+Codex, SSH connection, or real scheduler was used by those fixtures.
+
+## Implementation scope
+
 The Slurm listener remains the owner of the real Codex configuration,
 authentication, sessions and Goals. A version query and a byte proxy do not
 need to initialize temporary helpers inside that same home. This change gives

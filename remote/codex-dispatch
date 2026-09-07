@@ -28,7 +28,8 @@ if [[ $# == 1 && "$1" == --version ]]; then
     if [[ ! -e "$directory" ]]; then mkdir -p -- "$directory"; fi
     [[ -d "$directory" && -O "$directory" ]] || { echo 'Version-query directory must be user-owned.' >&2; exit 64; }
   done
-  chmod 700 -- "$version_home"
+  # The checked absolute path cannot be an option; BSD chmod expects files here.
+  chmod 700 "$version_home"
   # Only this private home's own helper directory may survive an earlier query.
   # Never populate it from the listener's config, authentication or sessions.
   shopt -s nullglob dotglob

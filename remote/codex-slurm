@@ -26,7 +26,8 @@ for directory in "$state_root/tmp" "$shared_tmp"; do
   if [[ ! -e "$directory" ]]; then mkdir -m 700 -- "$directory"; fi
   [[ -d "$directory" && -O "$directory" ]] || { echo 'Codex temporary directory must be user-owned.' >&2; exit 64; }
 done
-chmod 700 -- "$shared_tmp"
+# The checked absolute path cannot be an option; BSD chmod expects files here.
+chmod 700 "$shared_tmp"
 # Keep --unbuffered: the byte proxy cannot wait for newline-delimited stdout.
 # This is not Slurm --pty or an SSH terminal allocation.
 exec srun --jobid="$job_id" --overlap --unbuffered --ntasks=1 \
