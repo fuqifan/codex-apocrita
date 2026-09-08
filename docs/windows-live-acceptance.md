@@ -3,10 +3,12 @@
 Status: local regression checks, a fresh-build SSH check, actual adapter
 installation, upstream runtime activation, corrected Desktop launch, and Desktop
 SSH connection passed. Two concurrent documentation turns completed with real
-subagent review on that runtime. The first launch failure during a Store update
-is preserved below. Desktop display confirmation, a second restart/reconnect,
-and actual rollback acceptance are **still pending**.
-This record is not a recommendation to merge before those live checks finish.
+subagent review on that runtime. Desktop reply display, a second normal
+restart/reconnect, and subsequent file access in both original tasks also passed.
+Actual rollback, original-route reconnection, and subsequent document access
+also passed. The requested live sequence is complete for this installation and
+bounded documentation workload. The first launch failure during a Store update
+and broader untested behavior are preserved below.
 
 ## Candidate and backend scope
 
@@ -14,6 +16,7 @@ The Windows branch is based on upstream
 `29448229bcf1cca4aaf2f0fc61e713ad9f57bfba`, including its node-local Codex
 temporary-directory handling. Runtime files, upstream shell tests, installation
 scripts, and libraries have no changes relative to that base.
+Upstream `main` was checked again on 2026-09-08 and still pointed to that commit.
 
 The original clean build and installation used commit
 `95ccdf1923803b20921e35a82a091945ee0ef027`. The 2026-09-08 follow-up changes only
@@ -23,7 +26,9 @@ retries use this launcher correction on the original clean installation; the
 executable and installed profile hook are unchanged. The old backend proxy/version-home isolation
 changes are absent from this branch and are retained only in a separate
 experimental comparison branch. Their necessity after the upstream fix has not
-been demonstrated, and their proxy homes still require deliberate cleanup after
+been demonstrated: the ordinary root/subagent work, concurrent tasks, and
+restart/reconnect described here succeeded without them. This observation is
+limited to the tested workload. Their proxy homes still require deliberate cleanup after
 the relevant clients and allocation are confirmed inactive.
 
 ## Verified local results
@@ -132,10 +137,73 @@ list for these new turns, and `wait_threads` reported completion without final
 text, while the scoped remote rollout files contained the actual replies and
 tool events. This was not treated as proof that the agents had done no work.
 The six produced files and saved final replies establish the documentation
-outcome. User confirmation of their display in Desktop is still pending; no
-claim is made that the observation-API discrepancy is fixed.
+outcome. The user subsequently confirmed that both original tasks display the
+complete final replies and all three document links after the second restart.
+No claim is made that the observation-API discrepancy is fixed.
 
-## Live checks still required
+## Second normal restart and same-task file access
+
+The user normally quit Desktop and manually launched the same corrected
+candidate again. The new process had a distinct launch ID and process identity.
+Independent local inspection matched the successful receipt, official package
+identity, and scoped `APPLIED` handshake to that new process. A live candidate
+adapter was its direct child. Launcher, executable, and configuration hashes
+were unchanged from the first successful launch.
+
+The user confirmed the SSH connection and visible histories in both original
+documentation tasks. Login-side inspection verified that the existing listener
+remained in the same owned allocation and a new proxy step served the restarted
+Desktop, still using the unmodified upstream runtime. The scientific submission
+worker remained stopped.
+
+Both original tasks then completed a bounded read-only follow-up that reread the
+opening sections of their three documents and reported a substantive point from
+the text. Scoped rollout records contain the new tool events and final replies.
+Independent login-side reads confirmed that all six file hashes and sizes were
+unchanged. Both tasks returned to idle. This establishes reconnect and continued
+ordinary file access; it does not certify long-duration scientific Goal operation.
+
+The recovery input check verified all 16 pinned operational files. The original
+launcher and shortcut remained intact and resolved the current Store package.
+Its profile hook was correctly reported absent while the candidate hook was
+installed. These are read-only recovery readiness checks, not an actual rollback.
+
+## Actual rollback and restored-route verification
+
+The user normally quit Desktop and ran the preserved independent maintenance
+entrypoint. It completed with `READY_FOR_MANUAL_ORIGINAL_LAUNCH`. The saved
+Windows journal records successful candidate removal and original-hook
+installation. A fresh read-only check verified both PowerShell profiles against
+their original bytes and confirmed the directory ACL baseline matched, with no
+reported restoration errors.
+The candidate lease was disabled, and no live candidate adapter process remained.
+The original launch's protected lease and receipt matched the new Desktop process,
+which had a live original-adapter process as its direct child. The restored legacy
+hook's handshake has inherited permissions; its SHA-256 matched the protected
+receipt. This establishes restoration of that earlier installation, not adoption
+of the candidate's stricter metadata permissions by the legacy hook.
+The Windows SSH configuration hash matched its recorded baseline. No pre-test
+user/machine PATH value or system OpenSSH binary-hash baseline was available, so
+measured before/after equality for those items is not claimed. The reviewed
+adapter integration does not write global PATH or replace system OpenSSH.
+
+Login-side inspection verified `RESTORED` and the original runtime postconditions.
+Fresh listener and proxy steps were correlated with the previous runtime in the
+same preserved allocation. The user launched Desktop through the original
+adapter, confirmed SSH reconnection, and opened the existing research and
+documentation task histories, including the previously produced replies and links.
+
+A bounded read-only continuation in the original documentation task successfully
+read the quick-start file and reported its title and a factual point. All six
+acceptance documents retained their prior sizes and hashes. The task returned
+to idle. The independent scientific submission worker remained stopped; its
+restart and renewed scientific Goal execution are outside this maintenance test.
+
+The actual sequence restored the earlier installation and backend route;
+candidate source, private configuration, and recovery evidence were retained.
+It did not cancel or replace the controller allocation.
+
+## Completed live acceptance matrix
 
 | Required acceptance step | Current status |
 | --- | --- |
@@ -147,9 +215,9 @@ claim is made that the observation-API discrepancy is fixed.
 | Normal root command and file work | Passed; two completed documentation turns and six verified files |
 | Normal subagent command and file work | Passed; independent document reads/reviews for both roots |
 | Two concurrent Desktop tasks | Passed for bounded documentation work; approximately 228 seconds of overlap |
-| Latest task replies visible in Desktop | Pending user confirmation; observation APIs returned empty items |
-| Fully restart Desktop and resume the same tasks | Pending |
-| Roll back actual profile integration and restore the previous route | Pending; fixtures alone passed |
+| Latest task replies visible in Desktop | Passed; user confirmed both final replies and their document links after restart |
+| Fully restart Desktop and resume the same tasks | Passed; distinct Desktop process, new proxy, and successful file reads in both original tasks |
+| Roll back actual profile integration and restore the previous route | Passed; actual restore, profile bytes/ACL baseline, original runtime, SSH and document access verified |
 
 During initial preparation, existing production tasks were left running. The new upstream wrapper prepares
 `HOME/.codex/tmp`, so changing only `CODEX_HOME` is insufficient for a separate
@@ -160,11 +228,14 @@ changed to force it through. A Desktop-wide CLI override would also affect the
 local backend and other SSH connections, so it was not installed as a workaround.
 For actual maintenance, the user paused existing Codex work and the independent
 submission worker. The scoped procedure preserved the allocation and recovery
-baselines while replacing the previous backend route. Scientific Goals remain
-paused until acceptance and restoration are verified.
+baselines while replacing the previous backend route. Scientific Goals and the
+independent submission worker remained paused after restoration; neither was
+silently restarted as part of acceptance.
 
-The remaining procedure is described in [the Windows guide](windows-wsl.md#clean-install-restart-and-rollback-acceptance).
-Actual Desktop lifecycle observations and new-runtime results will be added only
-after they have been obtained. Host identities, account names, research paths,
-job/task identifiers, raw application logs, and credentials are excluded from
-this public record.
+The reproducible procedure is described in [the Windows guide](windows-wsl.md#clean-install-restart-and-rollback-acceptance).
+The sequence covers one Windows/WSL installation and bounded documentation work.
+It does not certify long-duration unattended Goals, peak resource use, every
+security product, future Desktop versions, or shutdown/sleep/network-loss
+recovery. No scientific computation or compute-node acceptance probe was run.
+Host identities, account names, research paths, job/task identifiers, raw
+application logs, and credentials are excluded from this public record.

@@ -276,13 +276,15 @@ the exact scope of any untested item.
 
 ## Evidence and limits
 
-The [dated acceptance record](windows-live-acceptance.md) separates completed
-local checks from the remaining live Desktop acceptance steps.
+The [dated acceptance record](windows-live-acceptance.md) records completed local
+checks and the actual installation, task work, restart/reconnect, and rollback
+sequence, with the original failed attempt and tested source revisions identified.
 
 The design comes from an integration exercised on Windows x64, PowerShell 5.1/7,
-WSL Ubuntu, Linux OpenSSH, and a Slurm-backed app-server. The generalized source
-needs its own installation acceptance: success of an earlier machine-specific
-installation is not a live acceptance test of this version.
+WSL Ubuntu, Linux OpenSSH, and a Slurm-backed app-server. The generalized adapter
+was built and installed afresh for this acceptance; the documented live retries
+used a launcher-only correction over that installation. Results from this one
+machine do not establish compatibility for every deployment.
 
 There is no blanket guarantee for future desktop packages, all distributions or
 security products, unattended goals, shutdown, sleep, network loss, allocation
